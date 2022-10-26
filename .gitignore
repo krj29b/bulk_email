@@ -1,0 +1,51 @@
+data/*
+
+*.pid
+
+__pycache__/
+*.py[cod]
+*.cache
+
+*.dump
+
+# backup
+*~
+*.py~
+*.bak
+
+# C
+*.so
+*.gch
+
+# pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# testy
+*.coverage
+_coverage
+*.cache
+_trial_temp*
+test/_trial_temp*
+*.test
+
+venv/*
+log/*
+.idea
+
+_archive
+Pipfile.lock
+
+# static files, docs
+_build/*
+_docs/_build/*
+files/*
+tagmap/*.json
+
+
+# profile
+_profile
+*.dat
+*.csv
+
+.vscode/
