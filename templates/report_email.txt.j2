@@ -1,0 +1,26 @@
+BulkMailer Task Completion Status Report
+========================================
+
+Execution Window: {{ report.start_time.strftime('%Y-%m-%d %H:%M:%S UTC') }} - {{ report.end_time.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+Total Duration: {{ "%.2f"|format(report.total_duration_ms) }} ms
+
+Summary:
+- Total Tasks: {{ report.total_tasks }}
+- Successful: {{ report.successful_tasks }}
+- Partial: {{ report.partial_tasks }}
+- Failed: {{ report.failed_tasks }}
+- Skipped: {{ report.skipped_tasks }}
+
+Task Details:
+--------------------------------------------------------------------------------
+{% for res in report.results %}
+Task ID: {{ res.task_id }}
+Status: {{ res.status }}
+Sent Count: {{ res.sent_count }}
+Attempts: {{ res.attempt_count }}
+Duration: {{ "%.2f"|format(res.duration_ms) }} ms
+{% if res.error_details %}
+Error: {% if include_error_trace %}{{ res.error_details }}{% else %}Details hidden{% endif %}
+{% endif %}
+--------------------------------------------------------------------------------
+{% endfor %}
