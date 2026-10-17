@@ -30,6 +30,7 @@ test/_trial_temp*
 *.test
 
 venv/*
+.venv/
 log/*
 .idea
 

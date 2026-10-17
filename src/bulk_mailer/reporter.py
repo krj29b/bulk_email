@@ -3,6 +3,7 @@ from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -52,6 +53,15 @@ class ReportGenerator:
         else:
             self.env = Environment(autoescape=select_autoescape(["html", "xml"]))
 
+    def _render_template(
+        self, template_name: str, context: dict[str, Any], fallback_content: str
+    ) -> str:
+        try:
+            tpl = self.env.get_template(template_name)
+            return tpl.render(**context)
+        except Exception:
+            return fallback_content
+
     def render_report(
         self, report: BatchSummaryReport, report_settings: ReportSettings
     ) -> tuple[str, str]:
@@ -64,24 +74,17 @@ class ReportGenerator:
             "include_error_trace": report_settings.include_full_error_trace,
         }
 
-        # Check if templates exist in env, else render default fallback
-        try:
-            html_tpl = self.env.get_template(html_template_name)
-            html_content = html_tpl.render(**context)
-        except Exception:
-            html_content = (
-                f"<h2>BulkMailer Report</h2><p>Tasks total: {report.total_tasks}, "
-                f"Success: {report.successful_tasks}, Failed: {report.failed_tasks}</p>"
-            )
+        html_fallback = (
+            f"<h2>BulkMailer Report</h2><p>Tasks total: {report.total_tasks}, "
+            f"Success: {report.successful_tasks}, Failed: {report.failed_tasks}</p>"
+        )
+        txt_fallback = (
+            f"BulkMailer Report\nTasks total: {report.total_tasks}, "
+            f"Success: {report.successful_tasks}, Failed: {report.failed_tasks}"
+        )
 
-        try:
-            txt_tpl = self.env.get_template(txt_template_name)
-            txt_content = txt_tpl.render(**context)
-        except Exception:
-            txt_content = (
-                f"BulkMailer Report\nTasks total: {report.total_tasks}, "
-                f"Success: {report.successful_tasks}, Failed: {report.failed_tasks}"
-            )
+        html_content = self._render_template(html_template_name, context, html_fallback)
+        txt_content = self._render_template(txt_template_name, context, txt_fallback)
 
         return html_content, txt_content
 
