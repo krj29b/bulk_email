@@ -1,12 +1,11 @@
-import smtplib
 import logging
-
-from pprint import pprint as pp
+import smtplib
 
 import ssl_context
-from messages import MESSAGE_TEXT as message_text, SUBJECT as subject
-from messages import build_message
 from config import Config
+from messages import MESSAGE_TEXT as message_text
+from messages import SUBJECT as subject
+from messages import build_message
 
 c = Config()
 c.init()
@@ -20,7 +19,7 @@ log = logging.getLogger()
 
 sender = c.config['sender']
 
-with open('data/email_list.txt', 'r') as f:
+with open('data/email_list.txt') as f:
     recipient_list = f.readlines()
 
 recipient_list = [email.strip('\n') for email in recipient_list]
