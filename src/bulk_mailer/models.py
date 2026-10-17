@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, time
 from enum import StrEnum
+from functools import cached_property, lru_cache
 from typing import Self
 
 from pydantic import BaseModel, Field
@@ -65,11 +66,28 @@ class MailConfiguration(BaseXmlModel, tag="MailConfiguration"):
     )
 
 
+@lru_cache(maxsize=1024)
+def parse_time_str(time_str: str) -> time:
+    parts = time_str.strip().split(":")
+    hour = int(parts[0])
+    minute = int(parts[1])
+    second = int(parts[2]) if len(parts) > 2 else 0
+    return time(hour, minute, second)
+
+
 class HourWindow(BaseXmlModel, tag="HourWindow"):
     start: str = attr()
     end: str = attr()
     max_concurrency: int = attr(default=1)
     rate_limit_per_min: int = attr(default=60)
+
+    @cached_property
+    def start_time(self) -> time:
+        return parse_time_str(self.start)
+
+    @cached_property
+    def end_time(self) -> time:
+        return parse_time_str(self.end)
 
 
 class Schedule(BaseXmlModel, tag="Schedule"):
