@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="Europe/Warsaw">
+  <Schedule description="Morning high-throughput operational window" id="SCHED-MORNING">
+    <AllowedHours>
+      <HourWindow end="12:00" max_concurrency="5" rate_limit_per_min="60" start="06:00"/>
+    </AllowedHours>
+  </Schedule>
+
+  <Schedule description="Afternoon throttled batch window" id="SCHED-AFTERNOON">
+    <AllowedHours>
+      <HourWindow end="15:00" max_concurrency="3" rate_limit_per_min="30" start="12:00"/>
+      <HourWindow end="20:00" max_concurrency="8" rate_limit_per_min="120" start="15:00"/>
+    </AllowedHours>
+  </Schedule>
+
+  <Schedule description="Unrestricted continuous dispatch window" id="SCHED-24X7">
+    <AllowedHours>
+      <HourWindow end="23:59" max_concurrency="10" rate_limit_per_min="200" start="00:00"/>
+    </AllowedHours>
+  </Schedule>
+</WorkSchedules>

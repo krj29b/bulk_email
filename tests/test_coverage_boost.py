@@ -1,0 +1,110 @@
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
+
+import aiosmtplib
+import pytest
+
+from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
+from bulk_mailer.models import (
+    BodyTemplate,
+    MailTask,
+    Recipients,
+    ReportSettings,
+    Settings,
+    TaskExecutionStatus,
+)
+from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
+from bulk_mailer.xml_loader import XMLValidationError, load_mail_configuration, load_work_schedules
+
+
+def test_template_renderer_absolute_path(tmp_path):
+    tpl_file = tmp_path / "abs_test.j2"
+    tpl_file.write_text("Abs {{ var }}")
+
+    renderer = TemplateRenderer()
+    res = renderer.render(str(tpl_file), {"var": "Val"})
+    assert res == "Abs Val"
+
+@pytest.mark.asyncio
+async def test_mailer_no_recipients():
+    settings = Settings()
+    mailer = AsyncMailer(settings, dry_run=True)
+    task = MailTask(
+        id="T_NO_RECIP",
+        schedule_ref="S1",
+        sender="s@example.com",
+        recipients=Recipients(to=[]),
+        subject="Subj",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+    res = await mailer.dispatch_task(task)
+    assert res.sent_count == 0
+    assert "No recipients defined" in (res.error_details or "")
+
+@pytest.mark.asyncio
+async def test_mailer_template_render_error():
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir="non_existent_dir_12345")
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=True)
+    task = MailTask(
+        id="T_BAD_TPL",
+        schedule_ref="S1",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subj",
+        body_template=BodyTemplate(template_path="missing_template.j2")
+    )
+    res = await mailer.dispatch_task(task)
+    assert res.status == TaskExecutionStatus.FAILED
+    assert "Template rendering error" in (res.error_details or "")
+
+@pytest.mark.asyncio
+async def test_mailer_smtp_exception_and_generic_exception():
+    settings = Settings()
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = False
+    mock_smtp.connect = AsyncMock(side_effect=aiosmtplib.SMTPException("SMTP Exception Test"))
+
+    mailer = AsyncMailer(settings, dry_run=False, smtp_client=mock_smtp)
+    msg = AsyncMock()
+    success, err = await mailer.send_single_message(msg, "s@example.com", ["r@example.com"])
+    assert success is False
+    assert "SMTP Exception Test" in (err or "")
+
+    # Connection error
+    mock_smtp.connect = AsyncMock(side_effect=ConnectionRefusedError("Conn error"))
+    success, err = await mailer.send_single_message(msg, "s@example.com", ["r@example.com"])
+    assert success is False
+    assert "Connection error" in (err or "")
+
+def test_xml_loader_invalid_schemas(tmp_path):
+    bad_file = tmp_path / "bad.xml"
+    bad_file.write_bytes(b"<Root><Child/></Root>")
+
+    with pytest.raises(XMLValidationError, match="Invalid MailConfiguration XML schema"):
+        load_mail_configuration(bad_file)
+
+    with pytest.raises(XMLValidationError, match="Invalid WorkSchedules XML schema"):
+        load_work_schedules(bad_file)
+
+def test_reporter_fallback(tmp_path):
+    gen = ReportGenerator(template_dir=tmp_path / "empty_dir")
+    report = aggregate_summary_report([], datetime.now(UTC), datetime.now(UTC))
+    report_settings = ReportSettings(recipient="r@example.com")
+    html_c, txt_c = gen.render_report(report, report_settings)
+    assert "BulkMailer Report" in html_c
+    assert "BulkMailer Report" in txt_c
+
+@pytest.mark.asyncio
+async def test_send_report_failure():
+    gen = ReportGenerator()
+    report = aggregate_summary_report([], datetime.now(UTC), datetime.now(UTC))
+    report_settings = ReportSettings(recipient="r@example.com")
+
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = False
+    mock_smtp.connect = AsyncMock(side_effect=aiosmtplib.SMTPException("Send report error"))
+
+    mailer = AsyncMailer(Settings(), dry_run=False, smtp_client=mock_smtp)
+    sent = await gen.send_report(report, report_settings, mailer)
+    assert sent is False

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MailConfiguration>
+  <ReportSettings>
+    <Recipient>ops-alerts@example.com</Recipient>
+    <Sender>mailer-daemon@example.com</Sender>
+    <SubjectPrefix>[BulkMailer Status Report]</SubjectPrefix>
+    <IncludeFullErrorTrace>true</IncludeFullErrorTrace>
+  </ReportSettings>
+  <Tasks>
+    <MailTask id="TASK-001" max_retries="3" priority="high" schedule_ref="SCHED-MORNING">
+      <Sender>noreply@example.com</Sender>
+      <Recipients>
+        <To>client.alpha@example.com</To>
+        <To>client.beta@example.com</To>
+        <Cc>account.manager@example.com</Cc>
+      </Recipients>
+      <Subject>Daily Operational Dispatch - EMEA</Subject>
+      <BodyTemplate format="html">templates/daily_dispatch.html.j2</BodyTemplate>
+      <ContextVariables>
+        <Var name="region">EMEA</Var>
+        <Var name="report_date">2026-10-17</Var>
+      </ContextVariables>
+    </MailTask>
+
+    <MailTask id="TASK-002" max_retries="2" priority="normal" schedule_ref="SCHED-AFTERNOON">
+      <Sender>billing@example.com</Sender>
+      <Recipients>
+        <To>finance.dept@example.com</To>
+      </Recipients>
+      <Subject>Automated Batch Settlement Summary</Subject>
+      <BodyTemplate format="html">templates/settlement_summary.html.j2</BodyTemplate>
+      <ContextVariables>
+        <Var name="batch_id">BATCH-2026-10</Var>
+        <Var name="currency">EUR</Var>
+      </ContextVariables>
+    </MailTask>
+  </Tasks>
+</MailConfiguration>
