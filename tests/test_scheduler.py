@@ -80,6 +80,121 @@ def test_task_scheduler_timezones():
     assert eligible is False
     assert window is None
 
+
+def test_is_task_eligible_naive_datetime():
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
+                ]
+            )
+        ]
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="SCHED-MORNING",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+
+    # Naive datetime during allowed window (08:00)
+    naive_dt = datetime(2026, 10, 17, 8, 0)
+    assert naive_dt.tzinfo is None
+    eligible, window = scheduler.is_task_eligible(task, reference_dt=naive_dt)
+    assert eligible is True
+    assert window is not None
+    assert window.max_concurrency == 5
+
+    # Naive datetime outside allowed window (15:00)
+    naive_dt_outside = datetime(2026, 10, 17, 15, 0)
+    assert naive_dt_outside.tzinfo is None
+    eligible_out, window_out = scheduler.is_task_eligible(task, reference_dt=naive_dt_outside)
+    assert eligible_out is False
+    assert window_out is None
+
+
+def test_is_task_eligible_none_datetime():
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="00:00", end="23:59", max_concurrency=5, rate_limit_per_min=60)
+                ]
+            )
+        ]
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="SCHED-MORNING",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+
+    eligible, window = scheduler.is_task_eligible(task, reference_dt=None)
+    assert eligible is True
+    assert window is not None
+
+
+def test_is_task_eligible_tz_conversion():
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
+                ]
+            )
+        ]
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="SCHED-MORNING",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+
+    # 07:00 UTC on Oct 17 is 09:00 in Europe/Warsaw (CEST / UTC+2 in Oct) -> Eligible
+    utc_dt = datetime(2026, 10, 17, 7, 0, tzinfo=ZoneInfo("UTC"))
+    eligible, window = scheduler.is_task_eligible(task, reference_dt=utc_dt)
+    assert eligible is True
+    assert window is not None
+
+
+def test_is_task_eligible_missing_schedule():
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[]
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="NON-EXISTENT",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+
+    eligible, window = scheduler.is_task_eligible(task)
+    assert eligible is False
+    assert window is None
+
+
 @pytest.mark.asyncio
 async def test_rate_limiter():
     limiter = TokenBucketRateLimiter(rate_limit_per_min=6000)  # fast limit for test
