@@ -6,13 +6,8 @@ _DEFAULT_CIPHERS = (
 '!eNULL:!MD5')
 
 
-def get_context():
-    # only TLSv1 or higher
-    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    context.options |= ssl.OP_NO_SSLv2
-    context.options |= ssl.OP_NO_SSLv3
-
+def get_context() -> ssl.SSLContext:
+    """Returns a secure SSLContext using recommended TLS defaults."""
+    context = ssl.create_default_context()
     context.set_ciphers(_DEFAULT_CIPHERS)
-    context.set_default_verify_paths()
-    context.verify_mode = ssl.CERT_REQUIRED
     return context
