@@ -43,6 +43,16 @@ def test_is_time_in_window():
     assert is_time_in_window(parse_time_str("02:00"), s_overnight, e_overnight) is True
     assert is_time_in_window(parse_time_str("12:00"), s_overnight, e_overnight) is False
 
+    # Midnight spanning edge cases: times before start_time and after end_time (outside window)
+    assert is_time_in_window(parse_time_str("05:00"), s_overnight, e_overnight) is False
+    assert is_time_in_window(parse_time_str("21:00"), s_overnight, e_overnight) is False
+    assert is_time_in_window(parse_time_str("04:00:01"), s_overnight, e_overnight) is False
+    assert is_time_in_window(parse_time_str("21:59:59"), s_overnight, e_overnight) is False
+
+    # Midnight spanning boundaries: exact start_time and end_time
+    assert is_time_in_window(parse_time_str("22:00"), s_overnight, e_overnight) is True
+    assert is_time_in_window(parse_time_str("04:00"), s_overnight, e_overnight) is True
+
 def test_task_scheduler_timezones():
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
@@ -184,6 +194,33 @@ def test_is_task_eligible_missing_schedule():
     task = MailTask(
         id="T1",
         schedule_ref="NON-EXISTENT",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+
+    eligible, window = scheduler.is_task_eligible(task)
+    assert eligible is False
+    assert window is None
+
+
+def test_is_task_eligible_unknown_schedule_ref():
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
+                ]
+            )
+        ]
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="UNKNOWN_REF",
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",

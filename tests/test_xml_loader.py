@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
 
 from bulk_mailer.xml_loader import (
     XMLValidationError,
+    _parse_xml_safely,
     load_mail_configuration,
     load_work_schedules,
     validate_xml_configs,
@@ -24,6 +27,16 @@ def test_load_sample_xml_files(tmp_path):
 def test_missing_file():
     with pytest.raises(XMLValidationError, match="File not found"):
         load_mail_configuration("non_existent.xml")
+
+
+def test_parse_xml_safely_missing_file():
+    fake_path = "non_existent_file.xml"
+    with pytest.raises(XMLValidationError, match=f"File not found: {fake_path}"):
+        _parse_xml_safely(fake_path)
+
+    fake_path_obj = Path("non_existent_path_obj.xml")
+    with pytest.raises(XMLValidationError, match=f"File not found: {fake_path_obj}"):
+        _parse_xml_safely(fake_path_obj)
 
 def test_invalid_schedule_reference(tmp_path):
     tasks_xml = tmp_path / "tasks.xml"
