@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import aiosmtplib
+import jinja2
 import pytest
 
 from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
@@ -14,6 +15,42 @@ def test_template_renderer(tmp_path):
     renderer = TemplateRenderer(template_dir=tmp_path)
     res = renderer.render("test.j2", {"name": "World"})
     assert res == "Hello World!"
+
+
+def test_template_renderer_missing_template_relative(tmp_path):
+    renderer = TemplateRenderer(template_dir=tmp_path)
+    with pytest.raises(jinja2.exceptions.TemplateNotFound):
+        renderer.render("non_existent_template.j2", {"name": "World"})
+
+
+def test_template_renderer_missing_template_absolute(tmp_path):
+    renderer = TemplateRenderer(template_dir=tmp_path)
+    abs_missing_path = str(tmp_path / "non_existent_abs_template.j2")
+    with pytest.raises(jinja2.exceptions.TemplateNotFound):
+        renderer.render(abs_missing_path, {"name": "World"})
+
+
+@pytest.mark.asyncio
+async def test_async_mailer_dispatch_missing_template(tmp_path):
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=True)
+
+    task = MailTask(
+        id="TASK-MISSING-TPL",
+        max_retries=1,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["to@example.com"]),
+        subject="Test Missing Template",
+        body_template=BodyTemplate(template_path="missing_template.j2"),
+    )
+
+    result = await mailer.dispatch_task(task)
+    assert result.status == TaskExecutionStatus.FAILED
+    assert result.sent_count == 0
+    assert "Template rendering error" in (result.error_details or "")
+    assert "missing_template.j2" in (result.error_details or "")
 
 
 @pytest.mark.asyncio
