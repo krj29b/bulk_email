@@ -1,6 +1,10 @@
+import logging
 import os
+from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -12,7 +16,7 @@ class Config:
             try:
                 self.config = yaml.safe_load(dcf)
             except yaml.YAMLError as exc:
-                print(exc)
+                logger.error(f"Error loading YAML configuration: {exc}")
 
         if self.config:
             yaml_password = self.config.get('password') or ''

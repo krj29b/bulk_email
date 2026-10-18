@@ -1,4 +1,18 @@
+from unittest.mock import patch
+
+import yaml
 from config import Config
+
+
+def test_config_yaml_error(caplog):
+    cfg = Config()
+    with patch("yaml.safe_load", side_effect=yaml.YAMLError("Invalid YAML")), caplog.at_level(
+        "ERROR"
+    ):
+        cfg.init()
+
+    assert cfg.config is None
+    assert "Error loading YAML configuration: Invalid YAML" in caplog.text
 
 
 def test_config_default_password(monkeypatch):
