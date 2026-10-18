@@ -73,3 +73,24 @@ async def test_async_mailer_retry_and_failure(tmp_path):
     assert result.sent_count == 0
     assert result.attempt_count == 3
     assert "SMTP error 451" in (result.error_details or "")
+
+
+def test_async_mailer_get_smtp_connection_default():
+    settings = Settings(
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        smtp_user="user@example.com",
+        smtp_password="password123",
+        smtp_use_tls=False,
+        smtp_start_tls=True,
+        smtp_timeout=15.0,
+    )
+    mailer = AsyncMailer(settings)
+
+    connection = mailer._get_smtp_connection()
+
+    assert isinstance(connection, aiosmtplib.SMTP)
+    assert connection.hostname == "smtp.example.com"
+    assert connection.port == 587
+    assert connection.use_tls is False
+    assert connection.timeout == 15.0
