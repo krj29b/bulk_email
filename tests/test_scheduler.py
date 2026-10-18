@@ -205,6 +205,33 @@ def test_is_task_eligible_missing_schedule():
     assert window is None
 
 
+def test_is_task_eligible_unknown_schedule_ref():
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
+                ]
+            )
+        ]
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="UNKNOWN_REF",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2")
+    )
+
+    eligible, window = scheduler.is_task_eligible(task)
+    assert eligible is False
+    assert window is None
+
+
 @pytest.mark.asyncio
 async def test_rate_limiter():
     limiter = TokenBucketRateLimiter(rate_limit_per_min=6000)  # fast limit for test
