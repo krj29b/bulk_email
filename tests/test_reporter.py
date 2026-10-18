@@ -53,3 +53,46 @@ async def test_send_report_dry_run():
 
     sent = await gen.send_report(report, report_settings, mailer)
     assert sent is True
+
+
+def test_render_report_success():
+    report_settings = ReportSettings(
+        recipient="admin@example.com",
+        sender="mailer@example.com",
+        subject_prefix="[TEST]",
+        include_full_error_trace=True,
+    )
+    t1 = datetime(2026, 10, 17, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 17, 10, 1, tzinfo=UTC)
+    results = [
+        TaskExecutionResult(task_id="T1", status=TaskExecutionStatus.SUCCESS, sent_count=1),
+    ]
+    report = aggregate_summary_report(results, t1, t2)
+
+    gen = ReportGenerator(template_dir="templates")
+    html_content, txt_content = gen.render_report(report, report_settings)
+
+    assert "BulkMailer Task Completion Status Report" in html_content
+    assert "BulkMailer Task Completion Status Report" in txt_content
+
+
+def test_render_report_fallback():
+    report_settings = ReportSettings(
+        recipient="admin@example.com",
+        sender="mailer@example.com",
+        subject_prefix="[TEST]",
+        include_full_error_trace=True,
+    )
+    t1 = datetime(2026, 10, 17, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 17, 10, 1, tzinfo=UTC)
+    results = [
+        TaskExecutionResult(task_id="T1", status=TaskExecutionStatus.SUCCESS, sent_count=1),
+    ]
+    report = aggregate_summary_report(results, t1, t2)
+
+    # Non-existent template directory forces Jinja environment lookup to fail
+    gen = ReportGenerator(template_dir="non_existent_dir_12345")
+    html_content, txt_content = gen.render_report(report, report_settings)
+
+    assert html_content == "<h2>BulkMailer Report</h2><p>Tasks total: 1, Success: 1, Failed: 0</p>"
+    assert txt_content == "BulkMailer Report\nTasks total: 1, Success: 1, Failed: 0"
