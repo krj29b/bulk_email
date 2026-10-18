@@ -2,16 +2,16 @@
 .PHONY: install test lint dead-code complexity audit quality-gate run-dry clean
 
 PYTHON ?= python
-PYTEST ?= pytest
+PYTEST ?= $(PYTHON) -m pytest
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
 test:
-	$(PYTEST) --cov=src/bulk_mailer --cov-report=term-missing
+	PYTHONPATH=. $(PYTEST) --cov=src/bulk_mailer --cov-report=term-missing
 
 lint:
-	ruff check src/ tests/
+	ruff check src/ tests/ config.py main.py
 	mypy src/
 
 dead-code:

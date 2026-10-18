@@ -3,15 +3,15 @@ import time as time_module
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
-from bulk_mailer.models import HourWindow, MailTask, Schedule, WorkSchedules
+from bulk_mailer.models import HourWindow, MailTask, Schedule, WorkSchedules, parse_time_str
 
-
-def parse_time_str(time_str: str) -> time:
-    parts = time_str.strip().split(":")
-    hour = int(parts[0])
-    minute = int(parts[1])
-    second = int(parts[2]) if len(parts) > 2 else 0
-    return time(hour, minute, second)
+__all__ = [
+    "TaskScheduler",
+    "TokenBucketRateLimiter",
+    "get_active_window",
+    "is_time_in_window",
+    "parse_time_str",
+]
 
 
 def is_time_in_window(current_time: time, start_time: time, end_time: time) -> bool:
@@ -25,9 +25,7 @@ def is_time_in_window(current_time: time, start_time: time, end_time: time) -> b
 def get_active_window(schedule: Schedule, dt: datetime) -> HourWindow | None:
     current_time = dt.time()
     for window in schedule.allowed_hours:
-        start_t = parse_time_str(window.start)
-        end_t = parse_time_str(window.end)
-        if is_time_in_window(current_time, start_t, end_t):
+        if is_time_in_window(current_time, window.start_time, window.end_time):
             return window
     return None
 
