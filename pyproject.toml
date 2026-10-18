@@ -41,6 +41,7 @@ packages = ["src/bulk_mailer"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+pythonpath = [".", "src"]
 addopts = "-ra -q --strict-markers"
 
 [tool.ruff]

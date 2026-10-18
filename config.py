@@ -4,10 +4,10 @@ import yaml
 
 
 class Config:
-    config_file = 'config.yml'
-    config = None
+    config_file: str = 'config.yml'
+    config: dict[str, Any] | None = None
 
-    def init(self):
+    def init(self) -> None:
         with open(self.config_file) as dcf:
             try:
                 self.config = yaml.safe_load(dcf)
