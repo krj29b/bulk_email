@@ -43,6 +43,16 @@ def test_is_time_in_window():
     assert is_time_in_window(parse_time_str("02:00"), s_overnight, e_overnight) is True
     assert is_time_in_window(parse_time_str("12:00"), s_overnight, e_overnight) is False
 
+    # Midnight spanning edge cases: times before start_time and after end_time (outside window)
+    assert is_time_in_window(parse_time_str("05:00"), s_overnight, e_overnight) is False
+    assert is_time_in_window(parse_time_str("21:00"), s_overnight, e_overnight) is False
+    assert is_time_in_window(parse_time_str("04:00:01"), s_overnight, e_overnight) is False
+    assert is_time_in_window(parse_time_str("21:59:59"), s_overnight, e_overnight) is False
+
+    # Midnight spanning boundaries: exact start_time and end_time
+    assert is_time_in_window(parse_time_str("22:00"), s_overnight, e_overnight) is True
+    assert is_time_in_window(parse_time_str("04:00"), s_overnight, e_overnight) is True
+
 def test_task_scheduler_timezones():
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
