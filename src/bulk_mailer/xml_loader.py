@@ -1,9 +1,11 @@
+import sqlite3
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import defusedxml.ElementTree as ET  # type: ignore[import-untyped]
 
 from bulk_mailer.models import MailConfiguration, WorkSchedules
+from bulk_mailer.repository import DatabaseRepository
 
 
 class XMLValidationError(Exception):
@@ -44,9 +46,7 @@ def load_work_schedules(file_path: str | Path) -> WorkSchedules:
         raise XMLValidationError(msg) from exc
 
 
-def validate_xml_configs(
-    mail_config: MailConfiguration, work_schedules: WorkSchedules
-) -> None:
+def validate_xml_configs(mail_config: MailConfiguration, work_schedules: WorkSchedules) -> None:
     schedule_ids = {s.id for s in work_schedules.schedules}
     missing_refs = set()
 
@@ -58,3 +58,55 @@ def validate_xml_configs(
         raise XMLValidationError(
             "Cross-reference validation failed: " + "; ".join(sorted(missing_refs))
         )
+
+
+def import_from_xml(
+    conn: sqlite3.Connection,
+    tasks_path: str | Path,
+    schedules_path: str | Path,
+    mode: Literal["upsert", "replace"] = "upsert",
+) -> tuple[MailConfiguration, WorkSchedules]:
+    mail_config = load_mail_configuration(tasks_path)
+    work_schedules = load_work_schedules(schedules_path)
+    validate_xml_configs(mail_config, work_schedules)
+
+    repo = DatabaseRepository(conn)
+    repo.save_work_schedules(work_schedules, mode=mode)
+    repo.save_mail_configuration(mail_config, mode=mode)
+
+    return mail_config, work_schedules
+
+
+def export_to_xml(
+    conn: sqlite3.Connection,
+    tasks_path: str | Path,
+    schedules_path: str | Path,
+) -> tuple[MailConfiguration, WorkSchedules]:
+    repo = DatabaseRepository(conn)
+    work_schedules = repo.get_work_schedules()
+    mail_config = repo.get_mail_configuration()
+
+    tasks_xml_bytes = mail_config.to_xml(encoding="utf-8", pretty_print=True)
+    schedules_xml_bytes = work_schedules.to_xml(encoding="utf-8", pretty_print=True)
+
+    xml_header = b'<?xml version="1.0" encoding="UTF-8"?>\n'
+
+    tasks_out = Path(tasks_path)
+    if tasks_out.parent:
+        tasks_out.parent.mkdir(parents=True, exist_ok=True)
+    tasks_content = (
+        tasks_xml_bytes if isinstance(tasks_xml_bytes, bytes) else tasks_xml_bytes.encode("utf-8")
+    )
+    tasks_out.write_bytes(xml_header + tasks_content)
+
+    schedules_out = Path(schedules_path)
+    if schedules_out.parent:
+        schedules_out.parent.mkdir(parents=True, exist_ok=True)
+    schedules_content = (
+        schedules_xml_bytes
+        if isinstance(schedules_xml_bytes, bytes)
+        else schedules_xml_bytes.encode("utf-8")
+    )
+    schedules_out.write_bytes(xml_header + schedules_content)
+
+    return mail_config, work_schedules

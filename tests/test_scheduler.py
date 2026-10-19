@@ -24,6 +24,7 @@ def test_parse_time_str() -> None:
     assert parse_time_str("08:30") == datetime.strptime("08:30", "%H:%M").time()
     assert parse_time_str("14:15:30") == datetime.strptime("14:15:30", "%H:%M:%S").time()
 
+
 def test_is_time_in_window() -> None:
     t1 = parse_time_str("10:00")
     t2 = parse_time_str("05:00")
@@ -53,6 +54,7 @@ def test_is_time_in_window() -> None:
     assert is_time_in_window(parse_time_str("22:00"), s_overnight, e_overnight) is True
     assert is_time_in_window(parse_time_str("04:00"), s_overnight, e_overnight) is True
 
+
 def test_task_scheduler_timezones() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
@@ -61,9 +63,9 @@ def test_task_scheduler_timezones() -> None:
                 id="SCHED-MORNING",
                 allowed_hours=[
                     HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
-                ]
+                ],
             )
-        ]
+        ],
     )
 
     scheduler = TaskScheduler(schedules)
@@ -73,7 +75,7 @@ def test_task_scheduler_timezones() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
 
     # 08:00 Warsaw time (UTC+1/UTC+2 depending on DST)
@@ -99,9 +101,9 @@ def test_is_task_eligible_naive_datetime() -> None:
                 id="SCHED-MORNING",
                 allowed_hours=[
                     HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
-                ]
+                ],
             )
-        ]
+        ],
     )
     scheduler = TaskScheduler(schedules)
     task = MailTask(
@@ -110,7 +112,7 @@ def test_is_task_eligible_naive_datetime() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
 
     # Naive datetime during allowed window (08:00)
@@ -137,9 +139,9 @@ def test_is_task_eligible_none_datetime() -> None:
                 id="SCHED-MORNING",
                 allowed_hours=[
                     HourWindow(start="00:00", end="23:59", max_concurrency=5, rate_limit_per_min=60)
-                ]
+                ],
             )
-        ]
+        ],
     )
     scheduler = TaskScheduler(schedules)
     task = MailTask(
@@ -148,7 +150,7 @@ def test_is_task_eligible_none_datetime() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
 
     eligible, window = scheduler.is_task_eligible(task, reference_dt=None)
@@ -164,9 +166,9 @@ def test_is_task_eligible_tz_conversion() -> None:
                 id="SCHED-MORNING",
                 allowed_hours=[
                     HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
-                ]
+                ],
             )
-        ]
+        ],
     )
     scheduler = TaskScheduler(schedules)
     task = MailTask(
@@ -175,7 +177,7 @@ def test_is_task_eligible_tz_conversion() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
 
     # 07:00 UTC on Oct 17 is 09:00 in Europe/Warsaw (CEST / UTC+2 in Oct) -> Eligible
@@ -186,10 +188,7 @@ def test_is_task_eligible_tz_conversion() -> None:
 
 
 def test_is_task_eligible_missing_schedule() -> None:
-    schedules = WorkSchedules(
-        timezone="Europe/Warsaw",
-        schedules=[]
-    )
+    schedules = WorkSchedules(timezone="Europe/Warsaw", schedules=[])
     scheduler = TaskScheduler(schedules)
     task = MailTask(
         id="T1",
@@ -197,7 +196,7 @@ def test_is_task_eligible_missing_schedule() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
 
     eligible, window = scheduler.is_task_eligible(task)
@@ -213,9 +212,9 @@ def test_is_task_eligible_unknown_schedule_ref() -> None:
                 id="SCHED-MORNING",
                 allowed_hours=[
                     HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
-                ]
+                ],
             )
-        ]
+        ],
     )
     scheduler = TaskScheduler(schedules)
     task = MailTask(
@@ -224,7 +223,7 @@ def test_is_task_eligible_unknown_schedule_ref() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subject",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
 
     eligible, window = scheduler.is_task_eligible(task)

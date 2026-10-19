@@ -30,6 +30,7 @@ def test_setup_logging(verbose: bool, expected_level: int) -> None:
         assert isinstance(handlers[0], logging.StreamHandler)
         assert handlers[0].stream == sys.stdout
 
+
 def test_cli_dry_run_samples() -> None:
     tasks = Path("config/samples/tasks.xml")
     schedules = Path("config/samples/schedules.xml")
@@ -47,7 +48,7 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
     tasks_xml = tmp_path / "tasks.xml"
     schedules_xml = tmp_path / "schedules.xml"
 
-    tasks_xml.write_bytes(b'''<?xml version="1.0" encoding="UTF-8"?>
+    tasks_xml.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
 <MailConfiguration>
   <ReportSettings>
     <Recipient>admin@example.com</Recipient>
@@ -66,16 +67,16 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
       <BodyTemplate format="html">tpl.j2</BodyTemplate>
     </MailTask>
   </Tasks>
-</MailConfiguration>''')
+</MailConfiguration>""")
 
-    schedules_xml.write_bytes(b'''<?xml version="1.0" encoding="UTF-8"?>
+    schedules_xml.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
 <WorkSchedules timezone="UTC">
   <Schedule id="SCHED-01">
     <AllowedHours>
       <HourWindow start="00:00" end="23:59" max_concurrency="5" rate_limit_per_min="60"/>
     </AllowedHours>
   </Schedule>
-</WorkSchedules>''')
+</WorkSchedules>""")
 
     from bulk_mailer.cli import run_dispatch_pipeline
     from bulk_mailer.models import TaskExecutionResult, TaskExecutionStatus
@@ -92,6 +93,7 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
         )
 
     import asyncio
+
     sem_instances: list[asyncio.Semaphore] = []
     original_sem = asyncio.Semaphore
 

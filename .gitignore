@@ -49,4 +49,8 @@ _profile
 *.dat
 *.csv
 
+*.db
+*.sqlite
+*.sqlite3
+
 .vscode/

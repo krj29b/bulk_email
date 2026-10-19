@@ -26,6 +26,7 @@ def test_template_renderer_absolute_path(tmp_path: Path) -> None:
     res = renderer.render(str(tpl_file), {"var": "Val"})
     assert res == "Abs Val"
 
+
 @pytest.mark.asyncio
 async def test_mailer_no_recipients() -> None:
     settings = Settings()
@@ -36,11 +37,12 @@ async def test_mailer_no_recipients() -> None:
         sender="s@example.com",
         recipients=Recipients(to=[]),
         subject="Subj",
-        body_template=BodyTemplate(template_path="t.j2")
+        body_template=BodyTemplate(template_path="t.j2"),
     )
     res = await mailer.dispatch_task(task)
     assert res.sent_count == 0
     assert "No recipients defined" in (res.error_details or "")
+
 
 @pytest.mark.asyncio
 async def test_mailer_template_render_error() -> None:
@@ -53,11 +55,12 @@ async def test_mailer_template_render_error() -> None:
         sender="s@example.com",
         recipients=Recipients(to=["r@example.com"]),
         subject="Subj",
-        body_template=BodyTemplate(template_path="missing_template.j2")
+        body_template=BodyTemplate(template_path="missing_template.j2"),
     )
     res = await mailer.dispatch_task(task)
     assert res.status == TaskExecutionStatus.FAILED
     assert "Template rendering error" in (res.error_details or "")
+
 
 @pytest.mark.asyncio
 async def test_mailer_smtp_exception_and_generic_exception() -> None:
@@ -78,6 +81,7 @@ async def test_mailer_smtp_exception_and_generic_exception() -> None:
     assert success is False
     assert "Connection error" in (err or "")
 
+
 def test_xml_loader_invalid_schemas(tmp_path: Path) -> None:
     bad_file = tmp_path / "bad.xml"
     bad_file.write_bytes(b"<Root><Child/></Root>")
@@ -88,6 +92,7 @@ def test_xml_loader_invalid_schemas(tmp_path: Path) -> None:
     with pytest.raises(XMLValidationError, match="Invalid WorkSchedules XML schema"):
         load_work_schedules(bad_file)
 
+
 def test_reporter_fallback(tmp_path: Path) -> None:
     gen = ReportGenerator(template_dir=tmp_path / "empty_dir")
     report = aggregate_summary_report([], datetime.now(UTC), datetime.now(UTC))
@@ -95,6 +100,7 @@ def test_reporter_fallback(tmp_path: Path) -> None:
     html_c, txt_c = gen.render_report(report, report_settings)
     assert "BulkMailer Report" in html_c
     assert "BulkMailer Report" in txt_c
+
 
 @pytest.mark.asyncio
 async def test_send_report_failure() -> None:
