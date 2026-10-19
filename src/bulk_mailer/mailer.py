@@ -23,17 +23,19 @@ class TemplateRenderer:
             loader=FileSystemLoader(str(self.template_dir)),
             autoescape=select_autoescape(["html", "xml"]),
         )
+        self._abs_envs: dict[Path, Environment] = {}
 
     def render(self, template_path: str, context: dict[str, Any]) -> str:
         # Check if template_path is relative or absolute
         tpl_path = Path(template_path)
         if tpl_path.is_absolute():
-            # Extract parent and filename
-            env = Environment(
-                loader=FileSystemLoader(str(tpl_path.parent)),
-                autoescape=select_autoescape(["html", "xml"]),
-            )
-            template = env.get_template(tpl_path.name)
+            parent = tpl_path.parent
+            if parent not in self._abs_envs:
+                self._abs_envs[parent] = Environment(
+                    loader=FileSystemLoader(str(parent)),
+                    autoescape=select_autoescape(["html", "xml"]),
+                )
+            template = self._abs_envs[parent].get_template(tpl_path.name)
         else:
             template = self.env.get_template(template_path)
 
@@ -93,12 +95,12 @@ class AsyncMailer:
         msg: MIMEMultipart,
         sender: str,
         recipients: list[str],
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool, str | None, dict[str, Any]]:
         if self.dry_run:
             logger.info(
                 f"[DRY-RUN] Would send email from {sender} to {recipients} subject={msg['Subject']}"
             )
-            return True, None
+            return True, None, {}
 
         client = self._get_smtp_connection()
         try:
@@ -108,14 +110,20 @@ class AsyncMailer:
                 if self.settings.smtp_user and self.settings.smtp_password:
                     await client.login(self.settings.smtp_user, self.settings.smtp_password)
 
-            await client.send_message(msg, sender=sender, recipients=recipients)
-            return True, None
+            res = await client.send_message(msg, sender=sender, recipients=recipients)
+            errors: dict[str, Any] = {}
+            if isinstance(res, tuple) and len(res) == 2 and isinstance(res[0], dict):
+                errors = res[0]
+
+            if errors:
+                return True, f"Partial delivery errors: {list(errors.keys())}", errors
+            return True, None, {}
         except aiosmtplib.SMTPResponseException as exc:
-            return False, f"SMTP error {exc.code}: {exc.message}"
+            return False, f"SMTP error {exc.code}: {exc.message}", {}
         except aiosmtplib.SMTPException as exc:
-            return False, f"SMTP Exception: {exc}"
+            return False, f"SMTP Exception: {exc}", {}
         except Exception as exc:
-            return False, f"Network/Connection error: {exc}"
+            return False, f"Network/Connection error: {exc}", {}
         finally:
             if self._custom_smtp_client is None and getattr(client, "is_connected", False):
                 with contextlib.suppress(Exception):
@@ -158,38 +166,54 @@ class AsyncMailer:
         attempts = 0
         max_attempts = max(1, task.max_retries + 1)
         last_error: str | None = None
-        sent_count = 0
-        failed_recipients: list[str] = []
+        pending_recipients = list(all_recipients)
+        successful_recipients: list[str] = []
 
-        while attempts < max_attempts:
+        while attempts < max_attempts and pending_recipients:
             attempts += 1
             if rate_limiter:
                 await rate_limiter.acquire()
 
-            success, error_msg = await self.send_single_message(
+            success, error_msg, errors = await self.send_single_message(
                 msg=msg,
                 sender=task.sender,
-                recipients=all_recipients,
+                recipients=pending_recipients,
             )
 
             if success:
-                sent_count = len(all_recipients)
-                last_error = None
-                break
+                if errors:
+                    failed_in_attempt = list(errors.keys())
+                    succeeded_in_attempt = [
+                        r for r in pending_recipients if r not in failed_in_attempt
+                    ]
+                    successful_recipients.extend(succeeded_in_attempt)
+                    pending_recipients = failed_in_attempt
+                    last_error = error_msg
+                else:
+                    successful_recipients.extend(pending_recipients)
+                    pending_recipients = []
+                    last_error = None
+                    break
             else:
                 last_error = error_msg
                 logger.warning(
                     f"Task {task.id} attempt {attempts}/{max_attempts} failed: {error_msg}"
                 )
-                if attempts < max_attempts:
-                    # Exponential backoff: 0.5s, 1s, 2s...
-                    backoff = 0.5 * (2 ** (attempts - 1))
-                    await asyncio.sleep(backoff)
+
+            if attempts < max_attempts and pending_recipients:
+                # Exponential backoff: 0.5s, 1s, 2s...
+                backoff = 0.5 * (2 ** (attempts - 1))
+                await asyncio.sleep(backoff)
 
         duration_ms = (time.monotonic() - start_time) * 1000.0
 
-        if last_error is None:
+        sent_count = len(successful_recipients)
+        failed_recipients = pending_recipients
+
+        if len(successful_recipients) == len(all_recipients):
             status = TaskExecutionStatus.SUCCESS
+            last_error = None
+            failed_recipients = []
         elif sent_count > 0:
             status = TaskExecutionStatus.PARTIAL
         else:

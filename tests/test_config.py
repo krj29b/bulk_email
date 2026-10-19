@@ -1,10 +1,10 @@
-from unittest.mock import patch
+from pathlib import Path
 
-import yaml
+import pytest
 from config import Config
 
 
-def test_config_init_valid_yaml(tmp_path):
+def test_config_init_valid_yaml(tmp_path: Path) -> None:
     config_file = tmp_path / "config.yml"
     config_file.write_text("host: localhost\nport: 587\npassword: mysecretpassword\n")
 
@@ -18,7 +18,7 @@ def test_config_init_valid_yaml(tmp_path):
     assert cfg.config["password"] == "mysecretpassword"
 
 
-def test_config_init_invalid_yaml(tmp_path, capsys):
+def test_config_init_invalid_yaml(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config_file = tmp_path / "config.yml"
     config_file.write_text("invalid_yaml: [unclosed_bracket")
 
@@ -31,7 +31,7 @@ def test_config_init_invalid_yaml(tmp_path, capsys):
     assert captured.out != ""
 
 
-def test_config_init_empty_yaml(tmp_path):
+def test_config_init_empty_yaml(tmp_path: Path) -> None:
     config_file = tmp_path / "config.yml"
     config_file.write_text("")
 
@@ -42,7 +42,7 @@ def test_config_init_empty_yaml(tmp_path):
     assert cfg.config is None
 
 
-def test_config_default_password(monkeypatch):
+def test_config_default_password(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SMTP_PASSWORD", raising=False)
     monkeypatch.delenv("PASSWORD", raising=False)
 
@@ -53,7 +53,7 @@ def test_config_default_password(monkeypatch):
     assert cfg.config["password"] == ""
 
 
-def test_config_password_from_smtp_password_env(monkeypatch):
+def test_config_password_from_smtp_password_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SMTP_PASSWORD", "secret123")
     monkeypatch.delenv("PASSWORD", raising=False)
 
@@ -64,7 +64,7 @@ def test_config_password_from_smtp_password_env(monkeypatch):
     assert cfg.config["password"] == "secret123"
 
 
-def test_config_password_from_password_env(monkeypatch):
+def test_config_password_from_password_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SMTP_PASSWORD", raising=False)
     monkeypatch.setenv("PASSWORD", "fallback_secret")
 
@@ -75,7 +75,25 @@ def test_config_password_from_password_env(monkeypatch):
     assert cfg.config["password"] == "fallback_secret"
 
 
-def test_config_password_precedence(tmp_path, monkeypatch):
+def test_config_password_explicit_empty_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / "config.yml"
+    config_file.write_text("password: yaml_pass\n")
+
+    monkeypatch.setenv("SMTP_PASSWORD", "")
+    monkeypatch.setenv("PASSWORD", "fallback_pass")
+
+    cfg = Config()
+    cfg.config_file = str(config_file)
+    cfg.init()
+
+    assert cfg.config is not None
+    # Explicit empty string for SMTP_PASSWORD overrides PASSWORD and YAML fallback
+    assert cfg.config["password"] == ""
+
+
+def test_config_password_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_file = tmp_path / "config.yml"
     config_file.write_text("password: yaml_pass\n")
 

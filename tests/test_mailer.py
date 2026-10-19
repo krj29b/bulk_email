@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import aiosmtplib
@@ -8,7 +9,7 @@ from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
 from bulk_mailer.models import BodyTemplate, MailTask, Recipients, Settings, TaskExecutionStatus
 
 
-def test_template_renderer(tmp_path):
+def test_template_renderer(tmp_path: Path) -> None:
     tpl_file = tmp_path / "test.j2"
     tpl_file.write_text("Hello {{ name }}!")
 
@@ -17,13 +18,13 @@ def test_template_renderer(tmp_path):
     assert res == "Hello World!"
 
 
-def test_template_renderer_missing_template_relative(tmp_path):
+def test_template_renderer_missing_template_relative(tmp_path: Path) -> None:
     renderer = TemplateRenderer(template_dir=tmp_path)
     with pytest.raises(jinja2.exceptions.TemplateNotFound):
         renderer.render("non_existent_template.j2", {"name": "World"})
 
 
-def test_template_renderer_missing_template_absolute(tmp_path):
+def test_template_renderer_missing_template_absolute(tmp_path: Path) -> None:
     renderer = TemplateRenderer(template_dir=tmp_path)
     abs_missing_path = str(tmp_path / "non_existent_abs_template.j2")
     with pytest.raises(jinja2.exceptions.TemplateNotFound):
@@ -31,7 +32,7 @@ def test_template_renderer_missing_template_absolute(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_async_mailer_dispatch_missing_template(tmp_path):
+async def test_async_mailer_dispatch_missing_template(tmp_path: Path) -> None:
     settings = Settings()
     renderer = TemplateRenderer(template_dir=tmp_path)
     mailer = AsyncMailer(settings, renderer=renderer, dry_run=True)
@@ -54,7 +55,7 @@ async def test_async_mailer_dispatch_missing_template(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_async_mailer_dry_run(tmp_path):
+async def test_async_mailer_dry_run(tmp_path: Path) -> None:
     tpl_file = tmp_path / "test.j2"
     tpl_file.write_text("Hello {{ name }}!")
 
@@ -80,7 +81,7 @@ async def test_async_mailer_dry_run(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_async_mailer_retry_and_failure(tmp_path):
+async def test_async_mailer_retry_and_failure(tmp_path: Path) -> None:
     tpl_file = tmp_path / "test.j2"
     tpl_file.write_text("Hello {{ name }}!")
 
@@ -113,7 +114,9 @@ async def test_async_mailer_retry_and_failure(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_task_failure_with_rate_limiter_and_network_exception(tmp_path, monkeypatch):
+async def test_dispatch_task_failure_with_rate_limiter_and_network_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tpl_file = tmp_path / "test.j2"
     tpl_file.write_text("Hello {{ name }}!")
 
@@ -159,7 +162,9 @@ async def test_dispatch_task_failure_with_rate_limiter_and_network_exception(tmp
 
 
 @pytest.mark.asyncio
-async def test_dispatch_task_retry_success_with_rate_limiter(tmp_path, monkeypatch):
+async def test_dispatch_task_retry_success_with_rate_limiter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tpl_file = tmp_path / "test.j2"
     tpl_file.write_text("Hello {{ name }}!")
 
@@ -202,3 +207,42 @@ async def test_dispatch_task_retry_success_with_rate_limiter(tmp_path, monkeypat
     assert mock_rate_limiter.acquire.call_count == 2
     assert mock_sleep.call_count == 1
     mock_sleep.assert_called_once_with(0.5)
+
+
+@pytest.mark.asyncio
+async def test_async_mailer_partial_delivery(tmp_path: Path) -> None:
+    tpl_file = tmp_path / "test.j2"
+    tpl_file.write_text("Hello {{ name }}!")
+
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = True
+
+    errors_dict = {"user2@example.com": (550, "User unknown")}
+    mock_smtp.send_message = AsyncMock(return_value=(errors_dict, "250 OK"))
+
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=False, smtp_client=mock_smtp)
+
+    task = MailTask(
+        id="TASK-PARTIAL",
+        max_retries=1,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["user1@example.com", "user2@example.com"]),
+        subject="Test Partial",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+
+    result = await mailer.dispatch_task(task)
+
+    assert result.status == TaskExecutionStatus.PARTIAL
+    assert result.sent_count == 1
+    assert result.failed_recipients == ["user2@example.com"]
+    assert result.attempt_count == 2
+    assert "user2@example.com" in (result.error_details or "")
+
+    assert mock_smtp.send_message.call_count == 2
+    second_call_recipients = mock_smtp.send_message.call_args_list[1].kwargs["recipients"]
+    assert second_call_recipients == ["user2@example.com"]

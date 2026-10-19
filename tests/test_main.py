@@ -119,3 +119,35 @@ async def test_async_performance_boost(
 
     sync_expected_time = num_emails * simulated_delay  # 0.50 seconds
     assert async_duration < sync_expected_time * 0.5  # At least 2x faster than sync sequential
+
+
+@pytest.mark.asyncio
+async def test_send_worker_task_done_on_exception() -> None:
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    queue.put_nowait("fail@example.com")
+
+    config = {
+        "smtp_server": "localhost",
+        "port": 25,
+        "logging": {"log_file": "test.log", "log_level": "INFO"},
+    }
+
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = True
+    mock_smtp.send_message = AsyncMock(side_effect=RuntimeError("SMTP dispatch error"))
+
+    logger = MagicMock()
+
+    with pytest.raises(RuntimeError, match="SMTP dispatch error"):
+        await main_module.send_worker(
+            queue=queue,
+            config=config,
+            context=None,
+            sender="sender@example.com",
+            log=logger,
+            smtp_client=mock_smtp,
+        )
+
+    # Key assertion: task_done was called, unblocking queue.join()
+    await asyncio.wait_for(queue.join(), timeout=1.0)
+    assert queue._unfinished_tasks == 0  # type: ignore[attr-defined]

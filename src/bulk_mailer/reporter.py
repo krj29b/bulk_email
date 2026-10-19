@@ -104,7 +104,7 @@ class ReportGenerator:
         msg.attach(MIMEText(txt_body, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        success, err = await mailer.send_single_message(
+        success, err, _ = await mailer.send_single_message(
             msg=msg,
             sender=report_settings.sender or "bulk-mailer-daemon@localhost",
             recipients=[report_settings.recipient],

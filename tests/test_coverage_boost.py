@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import aiosmtplib
@@ -17,7 +18,7 @@ from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
 from bulk_mailer.xml_loader import XMLValidationError, load_mail_configuration, load_work_schedules
 
 
-def test_template_renderer_absolute_path(tmp_path):
+def test_template_renderer_absolute_path(tmp_path: Path) -> None:
     tpl_file = tmp_path / "abs_test.j2"
     tpl_file.write_text("Abs {{ var }}")
 
@@ -26,7 +27,7 @@ def test_template_renderer_absolute_path(tmp_path):
     assert res == "Abs Val"
 
 @pytest.mark.asyncio
-async def test_mailer_no_recipients():
+async def test_mailer_no_recipients() -> None:
     settings = Settings()
     mailer = AsyncMailer(settings, dry_run=True)
     task = MailTask(
@@ -42,7 +43,7 @@ async def test_mailer_no_recipients():
     assert "No recipients defined" in (res.error_details or "")
 
 @pytest.mark.asyncio
-async def test_mailer_template_render_error():
+async def test_mailer_template_render_error() -> None:
     settings = Settings()
     renderer = TemplateRenderer(template_dir="non_existent_dir_12345")
     mailer = AsyncMailer(settings, renderer=renderer, dry_run=True)
@@ -59,7 +60,7 @@ async def test_mailer_template_render_error():
     assert "Template rendering error" in (res.error_details or "")
 
 @pytest.mark.asyncio
-async def test_mailer_smtp_exception_and_generic_exception():
+async def test_mailer_smtp_exception_and_generic_exception() -> None:
     settings = Settings()
     mock_smtp = AsyncMock()
     mock_smtp.is_connected = False
@@ -67,17 +68,17 @@ async def test_mailer_smtp_exception_and_generic_exception():
 
     mailer = AsyncMailer(settings, dry_run=False, smtp_client=mock_smtp)
     msg = AsyncMock()
-    success, err = await mailer.send_single_message(msg, "s@example.com", ["r@example.com"])
+    success, err, _ = await mailer.send_single_message(msg, "s@example.com", ["r@example.com"])
     assert success is False
     assert "SMTP Exception Test" in (err or "")
 
     # Connection error
     mock_smtp.connect = AsyncMock(side_effect=ConnectionRefusedError("Conn error"))
-    success, err = await mailer.send_single_message(msg, "s@example.com", ["r@example.com"])
+    success, err, _ = await mailer.send_single_message(msg, "s@example.com", ["r@example.com"])
     assert success is False
     assert "Connection error" in (err or "")
 
-def test_xml_loader_invalid_schemas(tmp_path):
+def test_xml_loader_invalid_schemas(tmp_path: Path) -> None:
     bad_file = tmp_path / "bad.xml"
     bad_file.write_bytes(b"<Root><Child/></Root>")
 
@@ -87,7 +88,7 @@ def test_xml_loader_invalid_schemas(tmp_path):
     with pytest.raises(XMLValidationError, match="Invalid WorkSchedules XML schema"):
         load_work_schedules(bad_file)
 
-def test_reporter_fallback(tmp_path):
+def test_reporter_fallback(tmp_path: Path) -> None:
     gen = ReportGenerator(template_dir=tmp_path / "empty_dir")
     report = aggregate_summary_report([], datetime.now(UTC), datetime.now(UTC))
     report_settings = ReportSettings(recipient="r@example.com")
@@ -96,7 +97,7 @@ def test_reporter_fallback(tmp_path):
     assert "BulkMailer Report" in txt_c
 
 @pytest.mark.asyncio
-async def test_send_report_failure():
+async def test_send_report_failure() -> None:
     gen = ReportGenerator()
     report = aggregate_summary_report([], datetime.now(UTC), datetime.now(UTC))
     report_settings = ReportSettings(recipient="r@example.com")

@@ -11,7 +11,7 @@ from bulk_mailer.xml_loader import (
 )
 
 
-def test_load_sample_xml_files(tmp_path):
+def test_load_sample_xml_files(tmp_path: Path) -> None:
     tasks_path = "config/samples/tasks.xml"
     schedules_path = "config/samples/schedules.xml"
 
@@ -24,12 +24,12 @@ def test_load_sample_xml_files(tmp_path):
     # Validate cross references without errors
     validate_xml_configs(mail_config, schedules)
 
-def test_missing_file():
+def test_missing_file() -> None:
     with pytest.raises(XMLValidationError, match="File not found"):
         load_mail_configuration("non_existent.xml")
 
 
-def test_parse_xml_safely_missing_file():
+def test_parse_xml_safely_missing_file() -> None:
     fake_path = "non_existent_file.xml"
     with pytest.raises(XMLValidationError, match=f"File not found: {fake_path}"):
         _parse_xml_safely(fake_path)
@@ -38,7 +38,7 @@ def test_parse_xml_safely_missing_file():
     with pytest.raises(XMLValidationError, match=f"File not found: {fake_path_obj}"):
         _parse_xml_safely(fake_path_obj)
 
-def test_invalid_schedule_reference(tmp_path):
+def test_invalid_schedule_reference(tmp_path: Path) -> None:
     tasks_xml = tmp_path / "tasks.xml"
     schedules_xml = tmp_path / "schedules.xml"
 

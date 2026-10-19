@@ -52,7 +52,7 @@ class MailTask(BaseXmlModel, tag="MailTask"):
     subject: str = element(tag="Subject")
     body_template: BodyTemplate = element(tag="BodyTemplate")
     context_variables: list[ContextVar] = wrapped(
-        "ContextVariables", element(tag="Var", default_factory=list)
+        "ContextVariables", element(tag="Var", default_factory=list), default_factory=list
     )
 
     def get_context_dict(self) -> dict[str, str]:
