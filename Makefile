@@ -8,11 +8,11 @@ install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
 test:
-	PYTHONPATH=. $(PYTEST) --cov=src/bulk_mailer --cov-report=term-missing
+	PYTHONPATH=src $(PYTEST) --cov=src/bulk_mailer --cov-report=term-missing
 
 lint:
-	ruff check src/ tests/ config.py main.py
-	mypy src/
+	ruff check src/ tests/
+	mypy src/ tests/
 
 dead-code:
 	vulture src/ --min-confidence 80

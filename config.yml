@@ -1,8 +1,0 @@
-smtp_server: mail.example.com
-port: 587
-login: admin@example.com
-password: ""
-sender: admin@example.com
-logging:
-  log_file: log/bulk_email.log
-  log_level: DEBUG
