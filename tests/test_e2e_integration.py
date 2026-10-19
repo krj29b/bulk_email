@@ -25,6 +25,7 @@ async def test_full_dispatch_pipeline_with_ref_dt(tmp_path: Path) -> None:
 
     assert code == 0
 
+
 @pytest.mark.asyncio
 async def test_full_dispatch_pipeline_invalid_xml(tmp_path: Path) -> None:
     invalid_xml = tmp_path / "invalid.xml"

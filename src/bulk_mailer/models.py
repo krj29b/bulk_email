@@ -61,9 +61,7 @@ class MailTask(BaseXmlModel, tag="MailTask"):
 
 class MailConfiguration(BaseXmlModel, tag="MailConfiguration"):
     report_settings: ReportSettings = element(tag="ReportSettings")
-    tasks: list[MailTask] = wrapped(
-        "Tasks", element(tag="MailTask", default_factory=list)
-    )
+    tasks: list[MailTask] = wrapped("Tasks", element(tag="MailTask", default_factory=list))
 
 
 @lru_cache(maxsize=1024)

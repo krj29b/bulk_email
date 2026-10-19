@@ -1,9 +1,11 @@
 import asyncio
+import sqlite3
 import time as time_module
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from bulk_mailer.models import HourWindow, MailTask, Schedule, WorkSchedules, parse_time_str
+from bulk_mailer.repository import DatabaseRepository
 
 __all__ = [
     "TaskScheduler",
@@ -60,11 +62,16 @@ class TokenBucketRateLimiter:
 
 
 class TaskScheduler:
-    def __init__(self, work_schedules: WorkSchedules) -> None:
-        self.work_schedules = work_schedules
-        self.timezone = ZoneInfo(work_schedules.timezone)
+    def __init__(self, work_schedules: WorkSchedules | sqlite3.Connection) -> None:
+        if isinstance(work_schedules, sqlite3.Connection):
+            repo = DatabaseRepository(work_schedules)
+            self.work_schedules = repo.get_work_schedules()
+        else:
+            self.work_schedules = work_schedules
+
+        self.timezone = ZoneInfo(self.work_schedules.timezone)
         self._schedules_by_id: dict[str, Schedule] = {
-            s.id: s for s in work_schedules.schedules
+            s.id: s for s in self.work_schedules.schedules
         }
 
     def is_task_eligible(
