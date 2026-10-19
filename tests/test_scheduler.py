@@ -20,11 +20,11 @@ from bulk_mailer.scheduler import (
 )
 
 
-def test_parse_time_str():
+def test_parse_time_str() -> None:
     assert parse_time_str("08:30") == datetime.strptime("08:30", "%H:%M").time()
     assert parse_time_str("14:15:30") == datetime.strptime("14:15:30", "%H:%M:%S").time()
 
-def test_is_time_in_window():
+def test_is_time_in_window() -> None:
     t1 = parse_time_str("10:00")
     t2 = parse_time_str("05:00")
     t3 = parse_time_str("23:00")
@@ -53,7 +53,7 @@ def test_is_time_in_window():
     assert is_time_in_window(parse_time_str("22:00"), s_overnight, e_overnight) is True
     assert is_time_in_window(parse_time_str("04:00"), s_overnight, e_overnight) is True
 
-def test_task_scheduler_timezones():
+def test_task_scheduler_timezones() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
         schedules=[
@@ -91,7 +91,7 @@ def test_task_scheduler_timezones():
     assert window is None
 
 
-def test_is_task_eligible_naive_datetime():
+def test_is_task_eligible_naive_datetime() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
         schedules=[
@@ -129,7 +129,7 @@ def test_is_task_eligible_naive_datetime():
     assert window_out is None
 
 
-def test_is_task_eligible_none_datetime():
+def test_is_task_eligible_none_datetime() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
         schedules=[
@@ -156,7 +156,7 @@ def test_is_task_eligible_none_datetime():
     assert window is not None
 
 
-def test_is_task_eligible_tz_conversion():
+def test_is_task_eligible_tz_conversion() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
         schedules=[
@@ -185,7 +185,7 @@ def test_is_task_eligible_tz_conversion():
     assert window is not None
 
 
-def test_is_task_eligible_missing_schedule():
+def test_is_task_eligible_missing_schedule() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
         schedules=[]
@@ -205,7 +205,7 @@ def test_is_task_eligible_missing_schedule():
     assert window is None
 
 
-def test_is_task_eligible_unknown_schedule_ref():
+def test_is_task_eligible_unknown_schedule_ref() -> None:
     schedules = WorkSchedules(
         timezone="Europe/Warsaw",
         schedules=[
@@ -233,7 +233,7 @@ def test_is_task_eligible_unknown_schedule_ref():
 
 
 @pytest.mark.asyncio
-async def test_rate_limiter():
+async def test_rate_limiter() -> None:
     limiter = TokenBucketRateLimiter(rate_limit_per_min=6000)  # fast limit for test
     start = asyncio.get_event_loop().time()
     for _ in range(5):

@@ -71,12 +71,20 @@ async def run_dispatch_pipeline(
     # 2. Evaluate task eligibility
     eligible_tasks: list[tuple[MailTask, TokenBucketRateLimiter, asyncio.Semaphore]] = []
     results: list[TaskExecutionResult] = []
+    window_controls: dict[
+        tuple[str, str, str], tuple[TokenBucketRateLimiter, asyncio.Semaphore]
+    ] = {}
 
     for task in mail_config.tasks:
         eligible, window = scheduler.is_task_eligible(task, reference_dt=ref_dt)
         if eligible and window is not None:
-            rate_limiter = TokenBucketRateLimiter(window.rate_limit_per_min)
-            semaphore = asyncio.Semaphore(window.max_concurrency)
+            key = (task.schedule_ref, window.start, window.end)
+            if key not in window_controls:
+                window_controls[key] = (
+                    TokenBucketRateLimiter(window.rate_limit_per_min),
+                    asyncio.Semaphore(window.max_concurrency),
+                )
+            rate_limiter, semaphore = window_controls[key]
             eligible_tasks.append((task, rate_limiter, semaphore))
         else:
             logger.info(f"Task {task.id} skipped due to schedule rules.")

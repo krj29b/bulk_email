@@ -12,7 +12,7 @@ from bulk_mailer.models import (
 from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
 
 
-def test_aggregate_summary_report():
+def test_aggregate_summary_report() -> None:
     t1 = datetime(2026, 10, 17, 10, 0, tzinfo=UTC)
     t2 = datetime(2026, 10, 17, 10, 1, tzinfo=UTC)
 
@@ -33,7 +33,7 @@ def test_aggregate_summary_report():
 
 
 @pytest.mark.asyncio
-async def test_send_report_dry_run():
+async def test_send_report_dry_run() -> None:
     report_settings = ReportSettings(
         recipient="admin@example.com",
         sender="mailer@example.com",
@@ -55,7 +55,7 @@ async def test_send_report_dry_run():
     assert sent is True
 
 
-def test_render_report_success():
+def test_render_report_success() -> None:
     report_settings = ReportSettings(
         recipient="admin@example.com",
         sender="mailer@example.com",
@@ -76,7 +76,7 @@ def test_render_report_success():
     assert "BulkMailer Task Completion Status Report" in txt_content
 
 
-def test_render_report_fallback():
+def test_render_report_fallback() -> None:
     report_settings = ReportSettings(
         recipient="admin@example.com",
         sender="mailer@example.com",

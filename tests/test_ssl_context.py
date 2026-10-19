@@ -4,14 +4,14 @@ from unittest.mock import MagicMock, patch
 import ssl_context
 
 
-def test_ssl_context_ciphers():
+def test_ssl_context_ciphers() -> None:
     assert "ECDH+3DES" not in ssl_context._DEFAULT_CIPHERS
     assert "DH+3DES" not in ssl_context._DEFAULT_CIPHERS
     assert "RSA+3DES" not in ssl_context._DEFAULT_CIPHERS
     assert "!3DES" in ssl_context._DEFAULT_CIPHERS
 
 
-def test_get_context():
+def test_get_context() -> None:
     ctx = ssl_context.get_context()
     assert isinstance(ctx, ssl.SSLContext)
     assert ctx.verify_mode == ssl.CERT_REQUIRED
@@ -22,7 +22,7 @@ def test_get_context():
         assert "DES-CBC3" not in cipher_name
 
 
-def test_get_context_config_default():
+def test_get_context_config_default() -> None:
     mock_config = MagicMock()
     mock_config.config = {'ssl': {'context': 'default'}}
     with patch('ssl_context.Config', return_value=mock_config):
@@ -31,7 +31,7 @@ def test_get_context_config_default():
         assert ctx.verify_mode == ssl.CERT_REQUIRED
 
 
-def test_get_context_config_unverified():
+def test_get_context_config_unverified() -> None:
     mock_config = MagicMock()
     mock_config.config = {'ssl': {'context': 'unverified'}}
     with patch('ssl_context.Config', return_value=mock_config):
@@ -40,7 +40,7 @@ def test_get_context_config_unverified():
         assert ctx.verify_mode == ssl.CERT_NONE
 
 
-def test_get_context_config_passed_explicitly():
+def test_get_context_config_passed_explicitly() -> None:
     ctx_unverified = ssl_context.get_context(config={'ssl': {'context': 'unverified'}})
     assert isinstance(ctx_unverified, ssl.SSLContext)
     assert ctx_unverified.verify_mode == ssl.CERT_NONE
@@ -50,7 +50,7 @@ def test_get_context_config_passed_explicitly():
     assert ctx_default.verify_mode == ssl.CERT_REQUIRED
 
 
-def test_get_context_config_exception_or_missing_ssl():
+def test_get_context_config_exception_or_missing_ssl() -> None:
     mock_config = MagicMock()
     mock_config.config = None
     mock_config.init.side_effect = Exception("Config error")

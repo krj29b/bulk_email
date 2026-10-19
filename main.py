@@ -58,10 +58,12 @@ async def send_worker(
             except asyncio.QueueEmpty:
                 break
 
-            msg = build_message(subject, sender, recipient_email, message_text)
-            await client.send_message(msg)
-            log.info(f'Sent to {recipient_email}')
-            queue.task_done()
+            try:
+                msg = build_message(subject, sender, recipient_email, message_text)
+                await client.send_message(msg)
+                log.info(f'Sent to {recipient_email}')
+            finally:
+                queue.task_done()
     finally:
         if smtp_client is None and getattr(client, "is_connected", False):
             with contextlib.suppress(Exception):

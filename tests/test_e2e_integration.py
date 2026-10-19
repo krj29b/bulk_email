@@ -8,7 +8,7 @@ from bulk_mailer.cli import run_dispatch_pipeline
 
 
 @pytest.mark.asyncio
-async def test_full_dispatch_pipeline_with_ref_dt(tmp_path):
+async def test_full_dispatch_pipeline_with_ref_dt(tmp_path: Path) -> None:
     tasks_file = Path("config/samples/tasks.xml")
     schedules_file = Path("config/samples/schedules.xml")
 
@@ -26,7 +26,7 @@ async def test_full_dispatch_pipeline_with_ref_dt(tmp_path):
     assert code == 0
 
 @pytest.mark.asyncio
-async def test_full_dispatch_pipeline_invalid_xml(tmp_path):
+async def test_full_dispatch_pipeline_invalid_xml(tmp_path: Path) -> None:
     invalid_xml = tmp_path / "invalid.xml"
     invalid_xml.write_bytes(b"<MailConfiguration><BadTag></MailConfiguration>")
     schedules_file = Path("config/samples/schedules.xml")
