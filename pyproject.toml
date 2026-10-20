@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "bulk-mailer"
 version = "0.1.0"
-description = "Asynchronous XML-driven bulk email dispatch and reporting engine"
+description = "Asynchronous SQLite-backed bulk email dispatch and reporting engine with XML import/export support"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
