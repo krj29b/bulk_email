@@ -8,6 +8,7 @@ import pytest
 from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
 from bulk_mailer.models import (
     BodyTemplate,
+    ContextVar,
     MailTask,
     Recipients,
     ReportSettings,
@@ -16,6 +17,53 @@ from bulk_mailer.models import (
 )
 from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
 from bulk_mailer.xml_loader import XMLValidationError, load_mail_configuration, load_work_schedules
+
+
+def test_mail_task_get_context_dict() -> None:
+    # Test empty context variables
+    task_empty = MailTask(
+        id="T_EMPTY",
+        schedule_ref="S1",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subj",
+        body_template=BodyTemplate(template_path="t.j2"),
+        context_variables=[],
+    )
+    assert task_empty.get_context_dict() == {}
+
+    # Test context variables mapping name -> value
+    task_with_vars = MailTask(
+        id="T_VARS",
+        schedule_ref="S1",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subj",
+        body_template=BodyTemplate(template_path="t.j2"),
+        context_variables=[
+            ContextVar(name="user_name", value="Alice"),
+            ContextVar(name="account_id", value="12345"),
+        ],
+    )
+    assert task_with_vars.get_context_dict() == {
+        "user_name": "Alice",
+        "account_id": "12345",
+    }
+
+    # Test duplicate keys (last key overwrites previous value)
+    task_duplicates = MailTask(
+        id="T_DUP",
+        schedule_ref="S1",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subj",
+        body_template=BodyTemplate(template_path="t.j2"),
+        context_variables=[
+            ContextVar(name="key", value="initial"),
+            ContextVar(name="key", value="overwritten"),
+        ],
+    )
+    assert task_duplicates.get_context_dict() == {"key": "overwritten"}
 
 
 def test_template_renderer_absolute_path(tmp_path: Path) -> None:
