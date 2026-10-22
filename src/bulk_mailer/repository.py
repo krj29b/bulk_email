@@ -243,72 +243,84 @@ class DatabaseRepository:
                 self.conn.execute("DELETE FROM tasks")
 
             for task in mail_config.tasks:
-                self.conn.execute(
-                    """
-                    INSERT INTO tasks
-                    (id, max_retries, priority, schedule_ref, sender, subject,
-                     body_format, body_template_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        max_retries = excluded.max_retries,
-                        priority = excluded.priority,
-                        schedule_ref = excluded.schedule_ref,
-                        sender = excluded.sender,
-                        subject = excluded.subject,
-                        body_format = excluded.body_format,
-                        body_template_path = excluded.body_template_path
-                    """,
-                    (
-                        task.id,
-                        task.max_retries,
-                        task.priority,
-                        task.schedule_ref,
-                        task.sender,
-                        task.subject,
-                        task.body_template.format,
-                        task.body_template.template_path,
-                    ),
-                )
+                self._save_task(task, mode=mode)
 
-                if mode == "upsert":
-                    self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
-                    self.conn.execute(
-                        "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
-                    )
+    def _save_task(
+        self,
+        task: MailTask,
+        mode: Literal["upsert", "replace"] = "upsert",
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO tasks
+            (id, max_retries, priority, schedule_ref, sender, subject,
+             body_format, body_template_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                max_retries = excluded.max_retries,
+                priority = excluded.priority,
+                schedule_ref = excluded.schedule_ref,
+                sender = excluded.sender,
+                subject = excluded.subject,
+                body_format = excluded.body_format,
+                body_template_path = excluded.body_template_path
+            """,
+            (
+                task.id,
+                task.max_retries,
+                task.priority,
+                task.schedule_ref,
+                task.sender,
+                task.subject,
+                task.body_template.format,
+                task.body_template.template_path,
+            ),
+        )
 
-                # Insert recipients
-                seq = 0
-                recipients_data = []
-                for email in task.recipients.to:
-                    recipients_data.append((task.id, "to", email, seq))
-                    seq += 1
-                for email in task.recipients.cc:
-                    recipients_data.append((task.id, "cc", email, seq))
-                    seq += 1
-                for email in task.recipients.bcc:
-                    recipients_data.append((task.id, "bcc", email, seq))
-                    seq += 1
+        if mode == "upsert":
+            self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
+            self.conn.execute(
+                "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
+            )
 
-                if recipients_data:
-                    self.conn.executemany(
-                        "INSERT INTO task_recipients "
-                        "(task_id, recipient_type, email, seq) VALUES (?, ?, ?, ?)",
-                        recipients_data,
-                    )
+        self._save_task_recipients(task.id, task.recipients)
+        self._save_task_context_variables(task.id, task.context_variables)
 
-                # Insert context variables
-                context_vars_data = [
-                    (task.id, var.name, var.value, seq_var)
-                    for seq_var, var in enumerate(task.context_variables)
-                ]
-                if context_vars_data:
-                    self.conn.executemany(
-                        """
-                        INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        context_vars_data,
-                    )
+    def _save_task_recipients(self, task_id: str, recipients: Recipients) -> None:
+        seq = 0
+        recipients_data = []
+        for email in recipients.to:
+            recipients_data.append((task_id, "to", email, seq))
+            seq += 1
+        for email in recipients.cc:
+            recipients_data.append((task_id, "cc", email, seq))
+            seq += 1
+        for email in recipients.bcc:
+            recipients_data.append((task_id, "bcc", email, seq))
+            seq += 1
+
+        if recipients_data:
+            self.conn.executemany(
+                "INSERT INTO task_recipients "
+                "(task_id, recipient_type, email, seq) VALUES (?, ?, ?, ?)",
+                recipients_data,
+            )
+
+    def _save_task_context_variables(
+        self, task_id: str, context_vars: list[ContextVar]
+    ) -> None:
+        context_vars_data = [
+            (task_id, var.name, var.value, seq_var)
+            for seq_var, var in enumerate(context_vars)
+        ]
+        if context_vars_data:
+            self.conn.executemany(
+                """
+                INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
+                VALUES (?, ?, ?, ?)
+                """,
+                context_vars_data,
+            )
 
     # --- Execution History / Logs ---
 
