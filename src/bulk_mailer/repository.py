@@ -161,6 +161,41 @@ class DatabaseRepository:
 
     # --- MailConfiguration & MailTask Operations ---
 
+    def _get_task_recipients(self, task_id: str) -> Recipients:
+        rec_rows = self.conn.execute(
+            """
+            SELECT recipient_type, email FROM task_recipients
+            WHERE task_id = ? ORDER BY seq, id
+            """,
+            (task_id,),
+        ).fetchall()
+
+        to_list: list[str] = []
+        cc_list: list[str] = []
+        bcc_list: list[str] = []
+        for rec in rec_rows:
+            rtype = rec["recipient_type"]
+            email = rec["email"]
+            if rtype == "to":
+                to_list.append(email)
+            elif rtype == "cc":
+                cc_list.append(email)
+            elif rtype == "bcc":
+                bcc_list.append(email)
+
+        return Recipients(to=to_list, cc=cc_list, bcc=bcc_list)
+
+    def _get_task_context_variables(self, task_id: str) -> list[ContextVar]:
+        var_rows = self.conn.execute(
+            """
+            SELECT var_name, var_value FROM task_context_variables
+            WHERE task_id = ? ORDER BY seq, id
+            """,
+            (task_id,),
+        ).fetchall()
+
+        return [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
+
     def get_mail_tasks(self) -> list[MailTask]:
         task_rows = self.conn.execute(
             """
@@ -174,37 +209,8 @@ class DatabaseRepository:
         tasks: list[MailTask] = []
         for r in task_rows:
             task_id = r["id"]
-
-            rec_rows = self.conn.execute(
-                """
-                SELECT recipient_type, email FROM task_recipients
-                WHERE task_id = ? ORDER BY seq, id
-                """,
-                (task_id,),
-            ).fetchall()
-
-            to_list: list[str] = []
-            cc_list: list[str] = []
-            bcc_list: list[str] = []
-            for rec in rec_rows:
-                rtype = rec["recipient_type"]
-                email = rec["email"]
-                if rtype == "to":
-                    to_list.append(email)
-                elif rtype == "cc":
-                    cc_list.append(email)
-                elif rtype == "bcc":
-                    bcc_list.append(email)
-
-            var_rows = self.conn.execute(
-                """
-                SELECT var_name, var_value FROM task_context_variables
-                WHERE task_id = ? ORDER BY seq, id
-                """,
-                (task_id,),
-            ).fetchall()
-
-            context_vars = [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
+            recipients = self._get_task_recipients(task_id)
+            context_vars = self._get_task_context_variables(task_id)
 
             tasks.append(
                 MailTask(
@@ -213,7 +219,7 @@ class DatabaseRepository:
                     priority=r["priority"],
                     schedule_ref=r["schedule_ref"],
                     sender=r["sender"],
-                    recipients=Recipients(to=to_list, cc=cc_list, bcc=bcc_list),
+                    recipients=recipients,
                     subject=r["subject"],
                     body_template=BodyTemplate(
                         format=r["body_format"], template_path=r["body_template_path"]
