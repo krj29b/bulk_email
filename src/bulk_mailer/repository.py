@@ -277,17 +277,19 @@ class DatabaseRepository:
                     )
 
                 # Insert recipients
-                seq = 0
-                recipients_data = []
-                for email in task.recipients.to:
-                    recipients_data.append((task.id, "to", email, seq))
-                    seq += 1
-                for email in task.recipients.cc:
-                    recipients_data.append((task.id, "cc", email, seq))
-                    seq += 1
-                for email in task.recipients.bcc:
-                    recipients_data.append((task.id, "bcc", email, seq))
-                    seq += 1
+                recipients_list = [
+                    (rtype, email)
+                    for rtype, emails in [
+                        ("to", task.recipients.to),
+                        ("cc", task.recipients.cc),
+                        ("bcc", task.recipients.bcc),
+                    ]
+                    for email in emails
+                ]
+                recipients_data = [
+                    (task.id, rtype, email, seq)
+                    for seq, (rtype, email) in enumerate(recipients_list)
+                ]
 
                 if recipients_data:
                     self.conn.executemany(
