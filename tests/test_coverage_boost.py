@@ -70,7 +70,7 @@ def test_template_renderer_absolute_path(tmp_path: Path) -> None:
     tpl_file = tmp_path / "abs_test.j2"
     tpl_file.write_text("Abs {{ var }}")
 
-    renderer = TemplateRenderer()
+    renderer = TemplateRenderer(template_dir=tmp_path)
     res = renderer.render(str(tpl_file), {"var": "Val"})
     assert res == "Abs Val"
 

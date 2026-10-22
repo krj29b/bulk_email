@@ -23,22 +23,23 @@ class TemplateRenderer:
             loader=FileSystemLoader(str(self.template_dir)),
             autoescape=select_autoescape(["html", "xml"]),
         )
-        self._abs_envs: dict[Path, Environment] = {}
 
     def render(self, template_path: str, context: dict[str, Any]) -> str:
-        # Check if template_path is relative or absolute
         tpl_path = Path(template_path)
-        if tpl_path.is_absolute():
-            parent = tpl_path.parent
-            if parent not in self._abs_envs:
-                self._abs_envs[parent] = Environment(
-                    loader=FileSystemLoader(str(parent)),
-                    autoescape=select_autoescape(["html", "xml"]),
-                )
-            template = self._abs_envs[parent].get_template(tpl_path.name)
-        else:
-            template = self.env.get_template(template_path)
+        base_dir = self.template_dir.resolve()
 
+        if tpl_path.is_absolute():
+            resolved_path = tpl_path.resolve()
+        else:
+            resolved_path = (self.template_dir / tpl_path).resolve()
+
+        try:
+            rel_path = resolved_path.relative_to(base_dir)
+        except ValueError as exc:
+            msg = f"Access denied for template path outside base directory: {template_path}"
+            raise ValueError(msg) from exc
+
+        template = self.env.get_template(str(rel_path))
         return template.render(**context)
 
 

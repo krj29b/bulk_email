@@ -31,6 +31,23 @@ def test_template_renderer_missing_template_absolute(tmp_path: Path) -> None:
         renderer.render(abs_missing_path, {"name": "World"})
 
 
+def test_template_renderer_directory_traversal_blocked(tmp_path: Path) -> None:
+    tpl_dir = tmp_path / "templates"
+    tpl_dir.mkdir()
+    secret_file = tmp_path / "secret.txt"
+    secret_file.write_text("SUPER_SECRET_DATA")
+
+    renderer = TemplateRenderer(template_dir=tpl_dir)
+
+    # Relative path traversal
+    with pytest.raises(ValueError, match="Access denied for template path outside base directory"):
+        renderer.render("../secret.txt", {})
+
+    # Absolute path outside base directory
+    with pytest.raises(ValueError, match="Access denied for template path outside base directory"):
+        renderer.render(str(secret_file), {})
+
+
 @pytest.mark.asyncio
 async def test_async_mailer_dispatch_missing_template(tmp_path: Path) -> None:
     settings = Settings()
