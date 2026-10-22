@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import logging
-from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
