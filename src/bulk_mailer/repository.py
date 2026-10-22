@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from collections import defaultdict
 from typing import Literal
 
 from bulk_mailer.models import (
@@ -33,32 +34,33 @@ class DatabaseRepository:
             "SELECT id, description FROM schedules ORDER BY id"
         ).fetchall()
 
-        schedules: list[Schedule] = []
-        for s_row in sched_rows:
-            sched_id = s_row["id"]
-            desc = s_row["description"]
+        hw_rows = self.conn.execute(
+            """
+            SELECT schedule_id, start_time, end_time, max_concurrency, rate_limit_per_min
+            FROM hour_windows
+            ORDER BY schedule_id, seq, id
+            """
+        ).fetchall()
 
-            hw_rows = self.conn.execute(
-                """
-                SELECT start_time, end_time, max_concurrency, rate_limit_per_min
-                FROM hour_windows
-                WHERE schedule_id = ?
-                ORDER BY seq, id
-                """,
-                (sched_id,),
-            ).fetchall()
-
-            allowed_hours = [
+        hw_by_schedule: dict[str, list[HourWindow]] = defaultdict(list)
+        for hw in hw_rows:
+            hw_by_schedule[hw["schedule_id"]].append(
                 HourWindow(
                     start=hw["start_time"],
                     end=hw["end_time"],
                     max_concurrency=hw["max_concurrency"],
                     rate_limit_per_min=hw["rate_limit_per_min"],
                 )
-                for hw in hw_rows
-            ]
+            )
 
-            schedules.append(Schedule(id=sched_id, description=desc, allowed_hours=allowed_hours))
+        schedules: list[Schedule] = [
+            Schedule(
+                id=s_row["id"],
+                description=s_row["description"],
+                allowed_hours=hw_by_schedule[s_row["id"]],
+            )
+            for s_row in sched_rows
+        ]
 
         return WorkSchedules(timezone=timezone, schedules=schedules)
 
