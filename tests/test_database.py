@@ -171,3 +171,101 @@ def test_repository_get_report_settings_default_and_saved() -> None:
     assert loaded_updated.sender == "notifications@company.com"
     assert loaded_updated.subject_prefix == "[Updated Report]"
     assert loaded_updated.include_full_error_trace is True
+
+
+def test_repository_get_mail_tasks_empty() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    tasks = repo.get_mail_tasks()
+    assert tasks == []
+
+
+def test_repository_get_mail_tasks_detailed() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    schedules = WorkSchedules(
+        schedules=[Schedule(id="SCHED-01", allowed_hours=[HourWindow(start="00:00", end="23:59")])]
+    )
+    repo.save_work_schedules(schedules)
+
+    task2 = MailTask(
+        id="TASK-2",
+        max_retries=5,
+        priority="high",
+        schedule_ref="SCHED-01",
+        sender="sender2@example.com",
+        recipients=Recipients(
+            to=["to2@example.com"],
+            cc=["cc2@example.com"],
+            bcc=["bcc2@example.com"],
+        ),
+        subject="Subject 2",
+        body_template=BodyTemplate(format="html", template_path="tpl2.html"),
+        context_variables=[
+            ContextVar(name="var1", value="val1"),
+            ContextVar(name="var2", value="val2"),
+        ],
+    )
+
+    task1 = MailTask(
+        id="TASK-1",
+        max_retries=1,
+        priority="low",
+        schedule_ref="SCHED-01",
+        sender="sender1@example.com",
+        recipients=Recipients(
+            to=["to1_a@example.com", "to1_b@example.com"],
+            cc=[],
+            bcc=["bcc1@example.com"],
+        ),
+        subject="Subject 1",
+        body_template=BodyTemplate(format="text", template_path="tpl1.txt"),
+        context_variables=[],
+    )
+
+    # Save configuration containing task2 and task1
+    mail_config = MailConfiguration(
+        report_settings=ReportSettings(recipient="admin@example.com"),
+        tasks=[task2, task1],
+    )
+    repo.save_mail_configuration(mail_config)
+
+    tasks = repo.get_mail_tasks()
+    assert len(tasks) == 2
+
+    # Tasks should be ordered by ID ('TASK-1' before 'TASK-2')
+    t1 = tasks[0]
+    assert t1.id == "TASK-1"
+    assert t1.max_retries == 1
+    assert t1.priority == "low"
+    assert t1.schedule_ref == "SCHED-01"
+    assert t1.sender == "sender1@example.com"
+    assert t1.subject == "Subject 1"
+    assert t1.body_template.format == "text"
+    assert t1.body_template.template_path == "tpl1.txt"
+    assert t1.recipients.to == ["to1_a@example.com", "to1_b@example.com"]
+    assert t1.recipients.cc == []
+    assert t1.recipients.bcc == ["bcc1@example.com"]
+    assert t1.context_variables == []
+
+    t2 = tasks[1]
+    assert t2.id == "TASK-2"
+    assert t2.max_retries == 5
+    assert t2.priority == "high"
+    assert t2.schedule_ref == "SCHED-01"
+    assert t2.sender == "sender2@example.com"
+    assert t2.subject == "Subject 2"
+    assert t2.body_template.format == "html"
+    assert t2.body_template.template_path == "tpl2.html"
+    assert t2.recipients.to == ["to2@example.com"]
+    assert t2.recipients.cc == ["cc2@example.com"]
+    assert t2.recipients.bcc == ["bcc2@example.com"]
+    assert len(t2.context_variables) == 2
+    assert t2.context_variables[0].name == "var1"
+    assert t2.context_variables[0].value == "val1"
+    assert t2.context_variables[1].name == "var2"
+    assert t2.context_variables[1].value == "val2"
