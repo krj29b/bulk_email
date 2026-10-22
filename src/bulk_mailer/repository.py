@@ -171,40 +171,49 @@ class DatabaseRepository:
             """
         ).fetchall()
 
+        if not task_rows:
+            return []
+
+        task_ids = [r["id"] for r in task_rows]
+        placeholders = ",".join("?" for _ in task_ids)
+
+        rec_rows = self.conn.execute(
+            f"""
+            SELECT task_id, recipient_type, email FROM task_recipients
+            WHERE task_id IN ({placeholders})
+            ORDER BY seq, id
+            """,
+            task_ids,
+        ).fetchall()
+
+        recipients_by_task: dict[str, dict[str, list[str]]] = defaultdict(
+            lambda: {"to": [], "cc": [], "bcc": []}
+        )
+        for rec in rec_rows:
+            rtype = rec["recipient_type"]
+            if rtype in recipients_by_task[rec["task_id"]]:
+                recipients_by_task[rec["task_id"]][rtype].append(rec["email"])
+
+        var_rows = self.conn.execute(
+            f"""
+            SELECT task_id, var_name, var_value FROM task_context_variables
+            WHERE task_id IN ({placeholders})
+            ORDER BY seq, id
+            """,
+            task_ids,
+        ).fetchall()
+
+        vars_by_task: dict[str, list[ContextVar]] = defaultdict(list)
+        for v in var_rows:
+            vars_by_task[v["task_id"]].append(
+                ContextVar(name=v["var_name"], value=v["var_value"])
+            )
+
         tasks: list[MailTask] = []
         for r in task_rows:
             task_id = r["id"]
-
-            rec_rows = self.conn.execute(
-                """
-                SELECT recipient_type, email FROM task_recipients
-                WHERE task_id = ? ORDER BY seq, id
-                """,
-                (task_id,),
-            ).fetchall()
-
-            to_list: list[str] = []
-            cc_list: list[str] = []
-            bcc_list: list[str] = []
-            for rec in rec_rows:
-                rtype = rec["recipient_type"]
-                email = rec["email"]
-                if rtype == "to":
-                    to_list.append(email)
-                elif rtype == "cc":
-                    cc_list.append(email)
-                elif rtype == "bcc":
-                    bcc_list.append(email)
-
-            var_rows = self.conn.execute(
-                """
-                SELECT var_name, var_value FROM task_context_variables
-                WHERE task_id = ? ORDER BY seq, id
-                """,
-                (task_id,),
-            ).fetchall()
-
-            context_vars = [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
+            rec_dict = recipients_by_task[task_id]
+            context_vars = vars_by_task[task_id]
 
             tasks.append(
                 MailTask(
@@ -213,7 +222,11 @@ class DatabaseRepository:
                     priority=r["priority"],
                     schedule_ref=r["schedule_ref"],
                     sender=r["sender"],
-                    recipients=Recipients(to=to_list, cc=cc_list, bcc=bcc_list),
+                    recipients=Recipients(
+                        to=rec_dict["to"],
+                        cc=rec_dict["cc"],
+                        bcc=rec_dict["bcc"],
+                    ),
                     subject=r["subject"],
                     body_template=BodyTemplate(
                         format=r["body_format"], template_path=r["body_template_path"]
