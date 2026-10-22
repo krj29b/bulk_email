@@ -276,36 +276,36 @@ class DatabaseRepository:
 
                 # Insert recipients
                 seq = 0
+                recipients_data = []
                 for email in task.recipients.to:
-                    self.conn.execute(
-                        "INSERT INTO task_recipients "
-                        "(task_id, recipient_type, email, seq) VALUES (?, 'to', ?, ?)",
-                        (task.id, email, seq),
-                    )
+                    recipients_data.append((task.id, "to", email, seq))
                     seq += 1
                 for email in task.recipients.cc:
-                    self.conn.execute(
-                        "INSERT INTO task_recipients "
-                        "(task_id, recipient_type, email, seq) VALUES (?, 'cc', ?, ?)",
-                        (task.id, email, seq),
-                    )
+                    recipients_data.append((task.id, "cc", email, seq))
                     seq += 1
                 for email in task.recipients.bcc:
-                    self.conn.execute(
-                        "INSERT INTO task_recipients "
-                        "(task_id, recipient_type, email, seq) VALUES (?, 'bcc', ?, ?)",
-                        (task.id, email, seq),
-                    )
+                    recipients_data.append((task.id, "bcc", email, seq))
                     seq += 1
 
+                if recipients_data:
+                    self.conn.executemany(
+                        "INSERT INTO task_recipients "
+                        "(task_id, recipient_type, email, seq) VALUES (?, ?, ?, ?)",
+                        recipients_data,
+                    )
+
                 # Insert context variables
-                for seq_var, var in enumerate(task.context_variables):
-                    self.conn.execute(
+                context_vars_data = [
+                    (task.id, var.name, var.value, seq_var)
+                    for seq_var, var in enumerate(task.context_variables)
+                ]
+                if context_vars_data:
+                    self.conn.executemany(
                         """
                         INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (task.id, var.name, var.value, seq_var),
+                        context_vars_data,
                     )
 
     # --- Execution History / Logs ---
