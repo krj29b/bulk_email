@@ -105,3 +105,31 @@ def test_import_and_export_xml(tmp_path: Path) -> None:
 
     assert len(reloaded_config.tasks) == 2
     assert len(reloaded_schedules.schedules) == 3
+
+
+def test_load_work_schedules_invalid_time_or_timezone(tmp_path: Path) -> None:
+    schedules_invalid_time = tmp_path / "sched_invalid_time.xml"
+    schedules_invalid_time.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="UTC">
+  <Schedule id="SCHED-01">
+    <AllowedHours>
+      <HourWindow start="25:00" end="23:59"/>
+    </AllowedHours>
+  </Schedule>
+</WorkSchedules>""")
+
+    with pytest.raises(XMLValidationError):
+        load_work_schedules(schedules_invalid_time)
+
+    schedules_invalid_tz = tmp_path / "sched_invalid_tz.xml"
+    schedules_invalid_tz.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="Mars/Phobos">
+  <Schedule id="SCHED-01">
+    <AllowedHours>
+      <HourWindow start="00:00" end="23:59"/>
+    </AllowedHours>
+  </Schedule>
+</WorkSchedules>""")
+
+    with pytest.raises(XMLValidationError):
+        load_work_schedules(schedules_invalid_tz)
