@@ -15,9 +15,48 @@ from bulk_mailer.models import (
 from bulk_mailer.scheduler import (
     TaskScheduler,
     TokenBucketRateLimiter,
+    get_active_window,
     is_time_in_window,
     parse_time_str,
 )
+
+
+def test_get_active_window() -> None:
+    w1 = HourWindow(start="08:00", end="12:00", max_concurrency=2, rate_limit_per_min=30)
+    w2 = HourWindow(start="14:00", end="18:00", max_concurrency=4, rate_limit_per_min=60)
+    w_overnight = HourWindow(start="22:00", end="04:00", max_concurrency=1, rate_limit_per_min=10)
+
+    # Standard schedule with multiple windows
+    sched_multi = Schedule(id="SCHED-MULTI", allowed_hours=[w1, w2])
+
+    dt_w1 = datetime(2026, 10, 17, 10, 0)
+    assert get_active_window(sched_multi, dt_w1) == w1
+
+    dt_w2 = datetime(2026, 10, 17, 15, 30)
+    assert get_active_window(sched_multi, dt_w2) == w2
+
+    dt_gap = datetime(2026, 10, 17, 13, 0)
+    assert get_active_window(sched_multi, dt_gap) is None
+
+    # Overnight schedule
+    sched_overnight = Schedule(id="SCHED-NIGHT", allowed_hours=[w_overnight])
+
+    dt_night1 = datetime(2026, 10, 17, 23, 0)
+    assert get_active_window(sched_overnight, dt_night1) == w_overnight
+
+    dt_night2 = datetime(2026, 10, 17, 2, 0)
+    assert get_active_window(sched_overnight, dt_night2) == w_overnight
+
+    dt_day = datetime(2026, 10, 17, 12, 0)
+    assert get_active_window(sched_overnight, dt_day) is None
+
+    # Boundary conditions
+    assert get_active_window(sched_multi, datetime(2026, 10, 17, 8, 0)) == w1
+    assert get_active_window(sched_multi, datetime(2026, 10, 17, 12, 0)) == w1
+
+    # Empty windows
+    sched_empty = Schedule(id="SCHED-EMPTY", allowed_hours=[])
+    assert get_active_window(sched_empty, dt_w1) is None
 
 
 def test_parse_time_str() -> None:
