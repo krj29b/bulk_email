@@ -73,6 +73,7 @@ async def run_dispatch_pipeline(
     try:
         mail_config = repo.get_mail_configuration()
         work_schedules = repo.get_work_schedules()
+        execution_states = repo.get_task_execution_states()
     except Exception as exc:
         logger.error(f"Failed to load configuration from database: {exc}")
         return 1
@@ -96,7 +97,10 @@ async def run_dispatch_pipeline(
     ] = {}
 
     for task in mail_config.tasks:
-        eligible, window = scheduler.is_task_eligible(task, reference_dt=ref_dt)
+        last_run, last_status = execution_states.get(task.id, (None, None))
+        eligible, window = scheduler.is_task_eligible(
+            task, reference_dt=ref_dt, last_run=last_run, last_status=last_status
+        )
         if eligible and window is not None:
             key = (task.schedule_ref, window.start, window.end)
             if key not in window_controls:

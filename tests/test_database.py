@@ -171,3 +171,46 @@ def test_repository_get_report_settings_default_and_saved() -> None:
     assert loaded_updated.sender == "notifications@company.com"
     assert loaded_updated.subject_prefix == "[Updated Report]"
     assert loaded_updated.include_full_error_trace is True
+
+
+def test_get_task_execution_states() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    schedules = WorkSchedules(
+        schedules=[Schedule(id="SCHED-01", allowed_hours=[HourWindow(start="00:00", end="23:59")])]
+    )
+    repo.save_work_schedules(schedules)
+
+    mail_config = MailConfiguration(
+        report_settings=ReportSettings(recipient="admin@example.com"),
+        tasks=[
+            MailTask(
+                id="TASK-1",
+                schedule_ref="SCHED-01",
+                sender="sender@example.com",
+                recipients=Recipients(to=["user1@example.com"]),
+                subject="Test Subject",
+                body_template=BodyTemplate(template_path="tpl.j2"),
+            )
+        ],
+    )
+    repo.save_mail_configuration(mail_config)
+
+    states = repo.get_task_execution_states()
+    assert "TASK-1" in states
+    assert states["TASK-1"] == (None, None)
+
+    res = TaskExecutionResult(
+        task_id="TASK-1",
+        status=TaskExecutionStatus.SUCCESS,
+        sent_count=1,
+        duration_ms=10.0,
+    )
+    repo.log_task_execution(res, batch_id="B1")
+
+    updated_states = repo.get_task_execution_states()
+    last_run_dt, last_status = updated_states["TASK-1"]
+    assert last_run_dt is not None
+    assert last_status == TaskExecutionStatus.SUCCESS

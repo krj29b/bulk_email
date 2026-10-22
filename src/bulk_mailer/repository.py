@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from collections import defaultdict
+from datetime import UTC, datetime
 from typing import Literal
 
 from bulk_mailer.models import (
@@ -338,16 +339,48 @@ class DatabaseRepository:
                 ),
             )
 
+            now_utc_str = datetime.now(UTC).isoformat()
             self.conn.execute(
                 """
                 UPDATE tasks
-                SET last_run = CURRENT_TIMESTAMP,
+                SET last_run = ?,
                     last_status = ?,
                     last_error = ?
                 WHERE id = ?
                 """,
-                (result.status.value, result.error_details, result.task_id),
+                (now_utc_str, result.status.value, result.error_details, result.task_id),
             )
+
+    def get_task_execution_states(
+        self,
+    ) -> dict[str, tuple[datetime | None, TaskExecutionStatus | None]]:
+        rows = self.conn.execute("SELECT id, last_run, last_status FROM tasks").fetchall()
+        states: dict[str, tuple[datetime | None, TaskExecutionStatus | None]] = {}
+
+        for r in rows:
+            task_id = r["id"]
+            raw_last_run = r["last_run"]
+            raw_last_status = r["last_status"]
+
+            last_run_dt: datetime | None = None
+            if raw_last_run:
+                try:
+                    dt = datetime.fromisoformat(str(raw_last_run).replace("Z", "+00:00"))
+                    dt = dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+                    last_run_dt = dt
+                except ValueError:
+                    last_run_dt = None
+
+            last_status: TaskExecutionStatus | None = None
+            if raw_last_status:
+                try:
+                    last_status = TaskExecutionStatus(raw_last_status)
+                except ValueError:
+                    last_status = None
+
+            states[task_id] = (last_run_dt, last_status)
+
+        return states
 
     def get_execution_results_for_batch(self, batch_id: str) -> list[TaskExecutionResult]:
         rows = self.conn.execute(
