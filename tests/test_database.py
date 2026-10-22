@@ -128,3 +128,46 @@ def test_repository_log_execution() -> None:
     assert len(history) == 1
     assert history[0].task_id == "TASK-1"
     assert history[0].status == TaskExecutionStatus.SUCCESS
+
+
+def test_repository_get_report_settings_default_and_saved() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    # 1. Test default report settings when no row exists in report_settings table
+    defaults = repo.get_report_settings()
+    assert defaults.recipient == "admin@example.com"
+    assert defaults.sender is None
+    assert defaults.subject_prefix == "[BulkMailer Report]"
+    assert defaults.include_full_error_trace is True
+
+    # 2. Test save_report_settings and get_report_settings with custom values
+    custom = ReportSettings(
+        recipient="reports@company.com",
+        sender="noreply@company.com",
+        subject_prefix="[Custom]",
+        include_full_error_trace=False,
+    )
+    repo.save_report_settings(custom)
+
+    loaded = repo.get_report_settings()
+    assert loaded.recipient == "reports@company.com"
+    assert loaded.sender == "noreply@company.com"
+    assert loaded.subject_prefix == "[Custom]"
+    assert loaded.include_full_error_trace is False
+
+    # 3. Test updating existing settings (upsert behavior)
+    updated = ReportSettings(
+        recipient="new_admin@company.com",
+        sender="notifications@company.com",
+        subject_prefix="[Updated Report]",
+        include_full_error_trace=True,
+    )
+    repo.save_report_settings(updated)
+
+    loaded_updated = repo.get_report_settings()
+    assert loaded_updated.recipient == "new_admin@company.com"
+    assert loaded_updated.sender == "notifications@company.com"
+    assert loaded_updated.subject_prefix == "[Updated Report]"
+    assert loaded_updated.include_full_error_trace is True
