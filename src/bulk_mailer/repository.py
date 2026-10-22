@@ -255,8 +255,29 @@ class DatabaseRepository:
                 self.conn.execute("DELETE FROM task_recipients")
                 self.conn.execute("DELETE FROM tasks")
 
-            for task in mail_config.tasks:
-                self.conn.execute(
+            if mode == "upsert":
+                task_ids = [(task.id,) for task in mail_config.tasks]
+                if task_ids:
+                    self.conn.executemany("DELETE FROM task_recipients WHERE task_id = ?", task_ids)
+                    self.conn.executemany(
+                        "DELETE FROM task_context_variables WHERE task_id = ?", task_ids
+                    )
+
+            tasks_data = [
+                (
+                    task.id,
+                    task.max_retries,
+                    task.priority,
+                    task.schedule_ref,
+                    task.sender,
+                    task.subject,
+                    task.body_template.format,
+                    task.body_template.template_path,
+                )
+                for task in mail_config.tasks
+            ]
+            if tasks_data:
+                self.conn.executemany(
                     """
                     INSERT INTO tasks
                     (id, max_retries, priority, schedule_ref, sender, subject,
@@ -271,27 +292,14 @@ class DatabaseRepository:
                         body_format = excluded.body_format,
                         body_template_path = excluded.body_template_path
                     """,
-                    (
-                        task.id,
-                        task.max_retries,
-                        task.priority,
-                        task.schedule_ref,
-                        task.sender,
-                        task.subject,
-                        task.body_template.format,
-                        task.body_template.template_path,
-                    ),
+                    tasks_data,
                 )
 
-                if mode == "upsert":
-                    self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
-                    self.conn.execute(
-                        "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
-                    )
+            recipients_data = []
+            context_vars_data = []
 
-                # Insert recipients
+            for task in mail_config.tasks:
                 seq = 0
-                recipients_data = []
                 for email in task.recipients.to:
                     recipients_data.append((task.id, "to", email, seq))
                     seq += 1
@@ -302,26 +310,27 @@ class DatabaseRepository:
                     recipients_data.append((task.id, "bcc", email, seq))
                     seq += 1
 
-                if recipients_data:
-                    self.conn.executemany(
-                        "INSERT INTO task_recipients "
-                        "(task_id, recipient_type, email, seq) VALUES (?, ?, ?, ?)",
-                        recipients_data,
-                    )
+                for seq_var, var in enumerate(task.context_variables):
+                    context_vars_data.append((task.id, var.name, var.value, seq_var))
 
-                # Insert context variables
-                context_vars_data = [
-                    (task.id, var.name, var.value, seq_var)
-                    for seq_var, var in enumerate(task.context_variables)
-                ]
-                if context_vars_data:
-                    self.conn.executemany(
-                        """
-                        INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        context_vars_data,
-                    )
+            if recipients_data:
+                self.conn.executemany(
+                    """
+                    INSERT INTO task_recipients
+                    (task_id, recipient_type, email, seq)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    recipients_data,
+                )
+
+            if context_vars_data:
+                self.conn.executemany(
+                    """
+                    INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    context_vars_data,
+                )
 
     # --- Execution History / Logs ---
 
