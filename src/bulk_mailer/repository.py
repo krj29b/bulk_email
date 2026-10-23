@@ -255,48 +255,46 @@ class DatabaseRepository:
                 self.conn.execute("DELETE FROM task_recipients")
                 self.conn.execute("DELETE FROM tasks")
 
-            if mode == "upsert":
-                task_ids = [(task.id,) for task in mail_config.tasks]
-                if task_ids:
-                    self.conn.executemany("DELETE FROM task_recipients WHERE task_id = ?", task_ids)
-                    self.conn.executemany(
-                        "DELETE FROM task_context_variables WHERE task_id = ?", task_ids
-                    )
+            for task in mail_config.tasks:
+                self._save_task(task, mode=mode)
 
-            tasks_data = [
-                (
-                    task.id,
-                    task.max_retries,
-                    task.priority,
-                    task.schedule_ref,
-                    task.sender,
-                    task.subject,
-                    task.body_template.format,
-                    task.body_template.template_path,
-                )
-                for task in mail_config.tasks
-            ]
-            if tasks_data:
-                self.conn.executemany(
-                    """
-                    INSERT INTO tasks
-                    (id, max_retries, priority, schedule_ref, sender, subject,
-                     body_format, body_template_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        max_retries = excluded.max_retries,
-                        priority = excluded.priority,
-                        schedule_ref = excluded.schedule_ref,
-                        sender = excluded.sender,
-                        subject = excluded.subject,
-                        body_format = excluded.body_format,
-                        body_template_path = excluded.body_template_path
-                    """,
-                    tasks_data,
-                )
+    def _save_task(
+        self,
+        task: MailTask,
+        mode: Literal["upsert", "replace"] = "upsert",
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO tasks
+            (id, max_retries, priority, schedule_ref, sender, subject,
+             body_format, body_template_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                max_retries = excluded.max_retries,
+                priority = excluded.priority,
+                schedule_ref = excluded.schedule_ref,
+                sender = excluded.sender,
+                subject = excluded.subject,
+                body_format = excluded.body_format,
+                body_template_path = excluded.body_template_path
+            """,
+            (
+                task.id,
+                task.max_retries,
+                task.priority,
+                task.schedule_ref,
+                task.sender,
+                task.subject,
+                task.body_template.format,
+                task.body_template.template_path,
+            ),
+        )
 
-            recipients_data = []
-            context_vars_data = []
+        if mode == "upsert":
+            self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
+            self.conn.execute(
+                "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
+            )
 
                 # Insert recipients
                 recipients_list = [
@@ -326,14 +324,21 @@ class DatabaseRepository:
                     recipients_data,
                 )
 
-            if context_vars_data:
-                self.conn.executemany(
-                    """
-                    INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    context_vars_data,
-                )
+    def _save_task_context_variables(
+        self, task_id: str, context_vars: list[ContextVar]
+    ) -> None:
+        context_vars_data = [
+            (task_id, var.name, var.value, seq_var)
+            for seq_var, var in enumerate(context_vars)
+        ]
+        if context_vars_data:
+            self.conn.executemany(
+                """
+                INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
+                VALUES (?, ?, ?, ?)
+                """,
+                context_vars_data,
+            )
 
     # --- Execution History / Logs ---
 
