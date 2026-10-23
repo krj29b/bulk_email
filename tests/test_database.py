@@ -187,3 +187,76 @@ def test_repository_get_report_settings_default_and_saved() -> None:
     assert loaded_updated.sender == "notifications@company.com"
     assert loaded_updated.subject_prefix == "[Updated Report]"
     assert loaded_updated.include_full_error_trace is True
+
+
+def test_repository_save_report_settings_insert_and_raw_columns() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    # Initial save into empty table
+    settings = ReportSettings(
+        recipient="alerts@example.com",
+        sender=None,
+        subject_prefix="[Alerts]",
+        include_full_error_trace=False,
+    )
+    repo.save_report_settings(settings)
+
+    # Verify directly in DB table schema and raw row format
+    row = conn.execute(
+        "SELECT id, recipient, sender, subject_prefix, include_full_error_trace "
+        "FROM report_settings WHERE id = 1"
+    ).fetchone()
+    assert row is not None
+    assert row["id"] == 1
+    assert row["recipient"] == "alerts@example.com"
+    assert row["sender"] is None
+    assert row["subject_prefix"] == "[Alerts]"
+    assert row["include_full_error_trace"] == 0  # Saved as int 0 when False
+
+    # Verify retrieved model
+    retrieved = repo.get_report_settings()
+    assert retrieved == settings
+
+
+def test_repository_save_report_settings_upsert_overwrite() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    # First save
+    initial = ReportSettings(
+        recipient="first@example.com",
+        sender="sender1@example.com",
+        subject_prefix="[V1]",
+        include_full_error_trace=False,
+    )
+    repo.save_report_settings(initial)
+
+    # Second save (upsert)
+    updated = ReportSettings(
+        recipient="second@example.com",
+        sender="sender2@example.com",
+        subject_prefix="[V2]",
+        include_full_error_trace=True,
+    )
+    repo.save_report_settings(updated)
+
+    # Verify only 1 row exists in table (id=1)
+    count = conn.execute("SELECT COUNT(*) FROM report_settings").fetchone()[0]
+    assert count == 1
+
+    # Verify raw database row values
+    row = conn.execute(
+        "SELECT id, recipient, sender, subject_prefix, include_full_error_trace "
+        "FROM report_settings WHERE id = 1"
+    ).fetchone()
+    assert row["recipient"] == "second@example.com"
+    assert row["sender"] == "sender2@example.com"
+    assert row["subject_prefix"] == "[V2]"
+    assert row["include_full_error_trace"] == 1  # Saved as int 1 when True
+
+    # Verify retrieved model matches updated settings
+    retrieved = repo.get_report_settings()
+    assert retrieved == updated

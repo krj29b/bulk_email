@@ -105,3 +105,28 @@ def test_import_and_export_xml(tmp_path: Path) -> None:
 
     assert len(reloaded_config.tasks) == 2
     assert len(reloaded_schedules.schedules) == 3
+
+
+def test_import_from_xml_replace_mode(tmp_path: Path) -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+
+    tasks_path = "config/samples/tasks.xml"
+    schedules_path = "config/samples/schedules.xml"
+
+    # Initial import in upsert mode
+    import_from_xml(conn, tasks_path, schedules_path, mode="upsert")
+
+    # Verify foreign keys are enabled
+    fk_status = conn.execute("PRAGMA foreign_keys;").fetchone()[0]
+    assert fk_status == 1
+
+    # Re-import in replace mode should succeed without IntegrityError
+    mail_config, work_schedules = import_from_xml(conn, tasks_path, schedules_path, mode="replace")
+
+    repo = DatabaseRepository(conn)
+    db_config = repo.get_mail_configuration()
+    db_schedules = repo.get_work_schedules()
+
+    assert len(db_config.tasks) == len(mail_config.tasks)
+    assert len(db_schedules.schedules) == len(work_schedules.schedules)

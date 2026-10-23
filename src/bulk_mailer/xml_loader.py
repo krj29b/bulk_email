@@ -71,6 +71,11 @@ def import_from_xml(
     validate_xml_configs(mail_config, work_schedules)
 
     repo = DatabaseRepository(conn)
+    if mode == "replace":
+        with conn:
+            conn.execute("DELETE FROM task_context_variables")
+            conn.execute("DELETE FROM task_recipients")
+            conn.execute("DELETE FROM tasks")
     repo.save_work_schedules(work_schedules, mode=mode)
     repo.save_mail_configuration(mail_config, mode=mode)
 
