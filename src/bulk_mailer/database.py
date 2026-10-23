@@ -95,9 +95,12 @@ def get_connection(db_path: str | Path = ":memory:") -> sqlite3.Connection:
         if parent and not parent.exists():
             parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(path_str)
+    conn = sqlite3.connect(path_str, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    if path_str != ":memory:":
+        conn.execute("PRAGMA journal_mode = WAL;")
     return conn
 
 

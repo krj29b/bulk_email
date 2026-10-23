@@ -26,6 +26,25 @@ def test_database_init() -> None:
     assert "execution_logs" in tables
 
 
+def test_get_connection_pragmas(tmp_path) -> None:
+    # Memory connection check
+    mem_conn = get_connection(":memory:")
+    busy_timeout = mem_conn.execute("PRAGMA busy_timeout;").fetchone()[0]
+    journal_mode = mem_conn.execute("PRAGMA journal_mode;").fetchone()[0]
+    assert busy_timeout == 30000
+    assert journal_mode.lower() == "memory"
+    mem_conn.close()
+
+    # File connection check
+    db_file = tmp_path / "test.db"
+    file_conn = get_connection(db_file)
+    busy_timeout = file_conn.execute("PRAGMA busy_timeout;").fetchone()[0]
+    journal_mode = file_conn.execute("PRAGMA journal_mode;").fetchone()[0]
+    assert busy_timeout == 30000
+    assert journal_mode.lower() == "wal"
+    file_conn.close()
+
+
 def test_repository_save_and_get_schedules() -> None:
     conn = get_connection(":memory:")
     init_db(conn)
