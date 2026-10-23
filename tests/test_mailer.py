@@ -5,7 +5,7 @@ import aiosmtplib
 import jinja2
 import pytest
 
-from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
+from bulk_mailer.mailer import AsyncMailer, TemplateRenderer, build_email_message
 from bulk_mailer.models import BodyTemplate, MailTask, Recipients, Settings, TaskExecutionStatus
 
 
@@ -16,6 +16,33 @@ def test_template_renderer(tmp_path: Path) -> None:
     renderer = TemplateRenderer(template_dir=tmp_path)
     res = renderer.render("test.j2", {"name": "World"})
     assert res == "Hello World!"
+
+
+def test_template_renderer_nested_posix_path(tmp_path: Path) -> None:
+    sub_dir = tmp_path / "nested"
+    sub_dir.mkdir()
+    tpl_file = sub_dir / "tpl.j2"
+    tpl_file.write_text("Nested {{ name }}!")
+
+    renderer = TemplateRenderer(template_dir=tmp_path)
+    res = renderer.render("nested/tpl.j2", {"name": "World"})
+    assert res == "Nested World!"
+
+
+def test_build_email_message_headers() -> None:
+    task = MailTask(
+        id="TASK-HDR",
+        max_retries=1,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["to@example.com"]),
+        subject="Header Test",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+    msg = build_email_message(task, "Hello")
+
+    assert msg["Date"] is not None and len(msg["Date"]) > 0
+    assert msg["Message-ID"] is not None and len(msg["Message-ID"]) > 0
 
 
 def test_template_renderer_missing_template_relative(tmp_path: Path) -> None:

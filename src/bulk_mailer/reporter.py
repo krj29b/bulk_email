@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -63,7 +64,8 @@ class ReportGenerator:
         try:
             tpl = self.env.get_template(template_name)
             return tpl.render(**context)
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"Falling back to default report content for {template_name}: {exc}")
             return fallback_content
 
     def render_report(
@@ -104,6 +106,8 @@ class ReportGenerator:
         msg["Subject"] = f"{report_settings.subject_prefix} Task Execution Summary"
         msg["From"] = report_settings.sender or "bulk-mailer-daemon@localhost"
         msg["To"] = report_settings.recipient
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid()
 
         msg.attach(MIMEText(txt_body, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
