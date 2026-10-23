@@ -296,28 +296,33 @@ class DatabaseRepository:
                 "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
             )
 
-        self._save_task_recipients(task.id, task.recipients)
-        self._save_task_context_variables(task.id, task.context_variables)
+                # Insert recipients
+                recipients_list = [
+                    (rtype, email)
+                    for rtype, emails in [
+                        ("to", task.recipients.to),
+                        ("cc", task.recipients.cc),
+                        ("bcc", task.recipients.bcc),
+                    ]
+                    for email in emails
+                ]
+                recipients_data = [
+                    (task.id, rtype, email, seq)
+                    for seq, (rtype, email) in enumerate(recipients_list)
+                ]
 
-    def _save_task_recipients(self, task_id: str, recipients: Recipients) -> None:
-        seq = 0
-        recipients_data = []
-        for email in recipients.to:
-            recipients_data.append((task_id, "to", email, seq))
-            seq += 1
-        for email in recipients.cc:
-            recipients_data.append((task_id, "cc", email, seq))
-            seq += 1
-        for email in recipients.bcc:
-            recipients_data.append((task_id, "bcc", email, seq))
-            seq += 1
+                for seq_var, var in enumerate(task.context_variables):
+                    context_vars_data.append((task.id, var.name, var.value, seq_var))
 
-        if recipients_data:
-            self.conn.executemany(
-                "INSERT INTO task_recipients "
-                "(task_id, recipient_type, email, seq) VALUES (?, ?, ?, ?)",
-                recipients_data,
-            )
+            if recipients_data:
+                self.conn.executemany(
+                    """
+                    INSERT INTO task_recipients
+                    (task_id, recipient_type, email, seq)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    recipients_data,
+                )
 
     def _save_task_context_variables(
         self, task_id: str, context_vars: list[ContextVar]
