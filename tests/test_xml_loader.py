@@ -107,6 +107,43 @@ def test_import_and_export_xml(tmp_path: Path) -> None:
     assert len(reloaded_schedules.schedules) == 3
 
 
+def test_import_from_xml_replace_rollback_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+
+    tasks_path = "config/samples/tasks.xml"
+    schedules_path = "config/samples/schedules.xml"
+
+    # Initial import to populate database
+    import_from_xml(conn, tasks_path, schedules_path)
+
+    repo = DatabaseRepository(conn)
+    orig_config = repo.get_mail_configuration()
+    orig_schedules = repo.get_work_schedules()
+    assert len(orig_config.tasks) == 2
+    assert len(orig_schedules.schedules) == 3
+
+    # Monkeypatch DatabaseRepository._save_task to raise an exception
+    def mock_save_task(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("Simulated failure during task save")
+
+    monkeypatch.setattr(DatabaseRepository, "_save_task", mock_save_task)
+
+    with pytest.raises(RuntimeError, match="Simulated failure during task save"):
+        import_from_xml(conn, tasks_path, schedules_path, mode="replace")
+
+    # Verify rollback: database state remains unchanged
+    after_config = repo.get_mail_configuration()
+    after_schedules = repo.get_work_schedules()
+
+    assert len(after_config.tasks) == 2
+    assert len(after_schedules.schedules) == 3
+    assert [t.id for t in after_config.tasks] == [t.id for t in orig_config.tasks]
+    assert [s.id for s in after_schedules.schedules] == [s.id for s in orig_schedules.schedules]
+
+
 def test_load_work_schedules_invalid_time_or_timezone(tmp_path: Path) -> None:
     schedules_invalid_time = tmp_path / "sched_invalid_time.xml"
     schedules_invalid_time.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>

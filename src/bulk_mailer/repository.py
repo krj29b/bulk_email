@@ -69,54 +69,59 @@ class DatabaseRepository:
         self, work_schedules: WorkSchedules, mode: Literal["upsert", "replace"] = "upsert"
     ) -> None:
         with self.conn:
-            if mode == "replace":
-                self.conn.execute("DELETE FROM hour_windows")
-                self.conn.execute("DELETE FROM schedules")
-                self.conn.execute("DELETE FROM work_schedules_meta")
+            self._save_work_schedules(work_schedules, mode=mode)
 
+    def _save_work_schedules(
+        self, work_schedules: WorkSchedules, mode: Literal["upsert", "replace"] = "upsert"
+    ) -> None:
+        if mode == "replace":
+            self.conn.execute("DELETE FROM hour_windows")
+            self.conn.execute("DELETE FROM schedules")
+            self.conn.execute("DELETE FROM work_schedules_meta")
+
+        self.conn.execute(
+            """
+            INSERT INTO work_schedules_meta (id, timezone)
+            VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET timezone = excluded.timezone
+            """,
+            (work_schedules.timezone,),
+        )
+
+        for sched in work_schedules.schedules:
             self.conn.execute(
                 """
-                INSERT INTO work_schedules_meta (id, timezone)
-                VALUES (1, ?)
-                ON CONFLICT(id) DO UPDATE SET timezone = excluded.timezone
+                INSERT INTO schedules (id, description)
+                VALUES (?, ?)
+                ON CONFLICT(id) DO UPDATE SET description = excluded.description
                 """,
-                (work_schedules.timezone,),
+                (sched.id, sched.description),
             )
 
-            for sched in work_schedules.schedules:
-                self.conn.execute(
-                    """
-                    INSERT INTO schedules (id, description)
-                    VALUES (?, ?)
-                    ON CONFLICT(id) DO UPDATE SET description = excluded.description
-                    """,
-                    (sched.id, sched.description),
+            if mode == "upsert":
+                self.conn.execute("DELETE FROM hour_windows WHERE schedule_id = ?", (sched.id,))
+
+            hw_data = [
+                (
+                    sched.id,
+                    hw.start,
+                    hw.end,
+                    hw.max_concurrency,
+                    hw.rate_limit_per_min,
+                    seq,
                 )
-
-                if mode == "upsert":
-                    self.conn.execute("DELETE FROM hour_windows WHERE schedule_id = ?", (sched.id,))
-
-                hw_data = [
-                    (
-                        sched.id,
-                        hw.start,
-                        hw.end,
-                        hw.max_concurrency,
-                        hw.rate_limit_per_min,
-                        seq,
-                    )
-                    for seq, hw in enumerate(sched.allowed_hours)
-                ]
-                if hw_data:
-                    self.conn.executemany(
-                        """
-                        INSERT INTO hour_windows
-                        (schedule_id, start_time, end_time, max_concurrency,
-                         rate_limit_per_min, seq)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                        hw_data,
-                    )
+                for seq, hw in enumerate(sched.allowed_hours)
+            ]
+            if hw_data:
+                self.conn.executemany(
+                    """
+                    INSERT INTO hour_windows
+                    (schedule_id, start_time, end_time, max_concurrency,
+                     rate_limit_per_min, seq)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    hw_data,
+                )
 
     # --- ReportSettings Operations ---
 
@@ -249,15 +254,22 @@ class DatabaseRepository:
         mode: Literal["upsert", "replace"] = "upsert",
     ) -> None:
         with self.conn:
-            self._save_report_settings(mail_config.report_settings)
+            self._save_mail_configuration(mail_config, mode=mode)
 
-            if mode == "replace":
-                self.conn.execute("DELETE FROM task_context_variables")
-                self.conn.execute("DELETE FROM task_recipients")
-                self.conn.execute("DELETE FROM tasks")
+    def _save_mail_configuration(
+        self,
+        mail_config: MailConfiguration,
+        mode: Literal["upsert", "replace"] = "upsert",
+    ) -> None:
+        self._save_report_settings(mail_config.report_settings)
 
-            for task in mail_config.tasks:
-                self._save_task(task, mode=mode)
+        if mode == "replace":
+            self.conn.execute("DELETE FROM task_context_variables")
+            self.conn.execute("DELETE FROM task_recipients")
+            self.conn.execute("DELETE FROM tasks")
+
+        for task in mail_config.tasks:
+            self._save_task(task, mode=mode)
 
     def _save_task(
         self,
