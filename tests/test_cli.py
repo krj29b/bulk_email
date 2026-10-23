@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from bulk_mailer.cli import app, setup_logging
+from bulk_mailer.cli import app, run_dispatch_pipeline, setup_logging
 
 runner = CliRunner()
 
@@ -113,3 +113,70 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
         assert captured_rl[0] is captured_rl[1]
         # Identical semaphore instance (instantiated only once)
         assert len(sem_instances) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_dispatch_pipeline_closes_connection(tmp_path: Path) -> None:
+    db_file = tmp_path / "test_pipeline.db"
+
+    # Run dispatch pipeline using db_file
+    code = await run_dispatch_pipeline(db_path=str(db_file), dry_run=True)
+    assert code == 0
+
+    # Ensure file can be removed or unlinked (verifying connection handle is closed)
+    db_file.unlink()
+    assert not db_file.exists()
+
+
+def test_cli_import_and_export_closes_connection(tmp_path: Path) -> None:
+    tasks_xml = tmp_path / "tasks.xml"
+    schedules_xml = tmp_path / "schedules.xml"
+
+    tasks_xml.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<MailConfiguration>
+  <ReportSettings>
+    <Recipient>admin@example.com</Recipient>
+  </ReportSettings>
+</MailConfiguration>""")
+
+    schedules_xml.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="UTC"/>""")
+
+    db_file = tmp_path / "test_cli.db"
+
+    # Test import-xml
+    res_import = runner.invoke(
+        app,
+        [
+            "import-xml",
+            "--tasks-xml",
+            str(tasks_xml),
+            "--schedule-xml",
+            str(schedules_xml),
+            "--db",
+            str(db_file),
+        ],
+    )
+    assert res_import.exit_code == 0
+
+    out_tasks = tmp_path / "out_tasks.xml"
+    out_schedules = tmp_path / "out_schedules.xml"
+
+    # Test export-xml
+    res_export = runner.invoke(
+        app,
+        [
+            "export-xml",
+            "--tasks-xml",
+            str(out_tasks),
+            "--schedule-xml",
+            str(out_schedules),
+            "--db",
+            str(db_file),
+        ],
+    )
+    assert res_export.exit_code == 0
+
+    # Check that database file can be removed (unlocked)
+    db_file.unlink()
+    assert not db_file.exists()
