@@ -49,7 +49,33 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+select = [
+    "E",     # pycodestyle errors
+    "F",     # Pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "ASYNC", # flake8-async
+    "C90",   # McCabe cyclomatic complexity
+    "PLR",   # Pylint Refactor
+    "PERF",  # Perflint 
+    "PIE",   # flake8-pie
+    "PT",    # flake8-pytest-style
+    "RUF",   # Ruff-specific rules
+    "S",     # flake8-bandit 
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-branches = 10
+max-statements = 40
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "PLR2004"]
 
 [tool.mypy]
 python_version = "3.12"
