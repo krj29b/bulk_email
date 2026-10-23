@@ -96,22 +96,26 @@ class DatabaseRepository:
                 if mode == "upsert":
                     self.conn.execute("DELETE FROM hour_windows WHERE schedule_id = ?", (sched.id,))
 
-                for seq, hw in enumerate(sched.allowed_hours):
-                    self.conn.execute(
+                hw_data = [
+                    (
+                        sched.id,
+                        hw.start,
+                        hw.end,
+                        hw.max_concurrency,
+                        hw.rate_limit_per_min,
+                        seq,
+                    )
+                    for seq, hw in enumerate(sched.allowed_hours)
+                ]
+                if hw_data:
+                    self.conn.executemany(
                         """
                         INSERT INTO hour_windows
                         (schedule_id, start_time, end_time, max_concurrency,
                          rate_limit_per_min, seq)
                         VALUES (?, ?, ?, ?, ?, ?)
                         """,
-                        (
-                            sched.id,
-                            hw.start,
-                            hw.end,
-                            hw.max_concurrency,
-                            hw.rate_limit_per_min,
-                            seq,
-                        ),
+                        hw_data,
                     )
 
     # --- ReportSettings Operations ---
@@ -140,68 +144,36 @@ class DatabaseRepository:
         )
 
     def save_report_settings(self, settings: ReportSettings) -> None:
-        with self.conn:
-            self.conn.execute(
-                """
-                INSERT INTO report_settings
-                (id, recipient, sender, subject_prefix, include_full_error_trace)
-                VALUES (1, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    recipient = excluded.recipient,
-                    sender = excluded.sender,
-                    subject_prefix = excluded.subject_prefix,
-                    include_full_error_trace = excluded.include_full_error_trace
-                """,
-                (
-                    settings.recipient,
-                    settings.sender,
-                    settings.subject_prefix,
-                    1 if settings.include_full_error_trace else 0,
-                ),
-            )
+            with self.conn:
+                self._save_report_settings(settings)
+
+    def _save_report_settings(self, settings: ReportSettings) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO report_settings
+            (id, recipient, sender, subject_prefix, include_full_error_trace)
+            VALUES (1, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                recipient = excluded.recipient,
+                sender = excluded.sender,
+                subject_prefix = excluded.subject_prefix,
+                include_full_error_trace = excluded.include_full_error_trace
+            """,
+            (
+                settings.recipient,
+                settings.sender,
+                settings.subject_prefix,
+                1 if settings.include_full_error_trace else 0,
+            ),
+        )
 
     # --- MailConfiguration & MailTask Operations ---
-
-    def _get_task_recipients(self, task_id: str) -> Recipients:
-        rec_rows = self.conn.execute(
-            """
-            SELECT recipient_type, email FROM task_recipients
-            WHERE task_id = ? ORDER BY seq, id
-            """,
-            (task_id,),
-        ).fetchall()
-
-        to_list: list[str] = []
-        cc_list: list[str] = []
-        bcc_list: list[str] = []
-        for rec in rec_rows:
-            rtype = rec["recipient_type"]
-            email = rec["email"]
-            if rtype == "to":
-                to_list.append(email)
-            elif rtype == "cc":
-                cc_list.append(email)
-            elif rtype == "bcc":
-                bcc_list.append(email)
-
-        return Recipients(to=to_list, cc=cc_list, bcc=bcc_list)
-
-    def _get_task_context_variables(self, task_id: str) -> list[ContextVar]:
-        var_rows = self.conn.execute(
-            """
-            SELECT var_name, var_value FROM task_context_variables
-            WHERE task_id = ? ORDER BY seq, id
-            """,
-            (task_id,),
-        ).fetchall()
-
-        return [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
 
     def get_mail_tasks(self) -> list[MailTask]:
         task_rows = self.conn.execute(
             """
             SELECT id, max_retries, priority, schedule_ref, sender, subject,
-                   body_format, body_template_path
+                    body_format, body_template_path
             FROM tasks
             ORDER BY id
             """
@@ -210,16 +182,12 @@ class DatabaseRepository:
         if not task_rows:
             return []
 
-        task_ids = [r["id"] for r in task_rows]
-        placeholders = ",".join("?" for _ in task_ids)
-
         rec_rows = self.conn.execute(
-            f"""
-            SELECT task_id, recipient_type, email FROM task_recipients
-            WHERE task_id IN ({placeholders})
-            ORDER BY seq, id
-            """,
-            task_ids,
+            """
+            SELECT task_id, recipient_type, email
+            FROM task_recipients
+            ORDER BY task_id, seq, id
+            """
         ).fetchall()
 
         recipients_by_task: dict[str, dict[str, list[str]]] = defaultdict(
@@ -227,16 +195,15 @@ class DatabaseRepository:
         )
         for rec in rec_rows:
             rtype = rec["recipient_type"]
-            if rtype in recipients_by_task[rec["task_id"]]:
+            if rtype in ("to", "cc", "bcc"):
                 recipients_by_task[rec["task_id"]][rtype].append(rec["email"])
 
         var_rows = self.conn.execute(
-            f"""
-            SELECT task_id, var_name, var_value FROM task_context_variables
-            WHERE task_id IN ({placeholders})
-            ORDER BY seq, id
-            """,
-            task_ids,
+            """
+            SELECT task_id, var_name, var_value
+            FROM task_context_variables
+            ORDER BY task_id, seq, id
+            """
         ).fetchall()
 
         vars_by_task: dict[str, list[ContextVar]] = defaultdict(list)
@@ -248,9 +215,7 @@ class DatabaseRepository:
         tasks: list[MailTask] = []
         for r in task_rows:
             task_id = r["id"]
-            recipients = self._get_task_recipients(task_id)
-            context_vars = self._get_task_context_variables(task_id)
-
+            rec_data = recipients_by_task[task_id]
             tasks.append(
                 MailTask(
                     id=task_id,
@@ -258,12 +223,16 @@ class DatabaseRepository:
                     priority=r["priority"],
                     schedule_ref=r["schedule_ref"],
                     sender=r["sender"],
-                    recipients=recipients,
+                    recipients=Recipients(
+                        to=rec_data["to"],
+                        cc=rec_data["cc"],
+                        bcc=rec_data["bcc"],
+                    ),
                     subject=r["subject"],
                     body_template=BodyTemplate(
                         format=r["body_format"], template_path=r["body_template_path"]
                     ),
-                    context_variables=context_vars,
+                    context_variables=vars_by_task[task_id],
                 )
             )
 
@@ -280,7 +249,7 @@ class DatabaseRepository:
         mode: Literal["upsert", "replace"] = "upsert",
     ) -> None:
         with self.conn:
-            self.save_report_settings(mail_config.report_settings)
+            self._save_report_settings(mail_config.report_settings)
 
             if mode == "replace":
                 self.conn.execute("DELETE FROM task_context_variables")
