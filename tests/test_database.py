@@ -189,74 +189,99 @@ def test_repository_get_report_settings_default_and_saved() -> None:
     assert loaded_updated.include_full_error_trace is True
 
 
-def test_repository_save_report_settings_insert_and_raw_columns() -> None:
+def test_repository_get_mail_tasks_empty() -> None:
     conn = get_connection(":memory:")
     init_db(conn)
     repo = DatabaseRepository(conn)
 
-    # Initial save into empty table
-    settings = ReportSettings(
-        recipient="alerts@example.com",
-        sender=None,
-        subject_prefix="[Alerts]",
-        include_full_error_trace=False,
-    )
-    repo.save_report_settings(settings)
-
-    # Verify directly in DB table schema and raw row format
-    row = conn.execute(
-        "SELECT id, recipient, sender, subject_prefix, include_full_error_trace "
-        "FROM report_settings WHERE id = 1"
-    ).fetchone()
-    assert row is not None
-    assert row["id"] == 1
-    assert row["recipient"] == "alerts@example.com"
-    assert row["sender"] is None
-    assert row["subject_prefix"] == "[Alerts]"
-    assert row["include_full_error_trace"] == 0  # Saved as int 0 when False
-
-    # Verify retrieved model
-    retrieved = repo.get_report_settings()
-    assert retrieved == settings
+    tasks = repo.get_mail_tasks()
+    assert tasks == []
 
 
-def test_repository_save_report_settings_upsert_overwrite() -> None:
+def test_repository_get_mail_tasks_detailed() -> None:
     conn = get_connection(":memory:")
     init_db(conn)
     repo = DatabaseRepository(conn)
 
-    # First save
-    initial = ReportSettings(
-        recipient="first@example.com",
-        sender="sender1@example.com",
-        subject_prefix="[V1]",
-        include_full_error_trace=False,
+    schedules = WorkSchedules(
+        schedules=[Schedule(id="SCHED-01", allowed_hours=[HourWindow(start="00:00", end="23:59")])]
     )
-    repo.save_report_settings(initial)
+    repo.save_work_schedules(schedules)
 
-    # Second save (upsert)
-    updated = ReportSettings(
-        recipient="second@example.com",
+    task2 = MailTask(
+        id="TASK-2",
+        max_retries=5,
+        priority="high",
+        schedule_ref="SCHED-01",
         sender="sender2@example.com",
-        subject_prefix="[V2]",
-        include_full_error_trace=True,
+        recipients=Recipients(
+            to=["to2@example.com"],
+            cc=["cc2@example.com"],
+            bcc=["bcc2@example.com"],
+        ),
+        subject="Subject 2",
+        body_template=BodyTemplate(format="html", template_path="tpl2.html"),
+        context_variables=[
+            ContextVar(name="var1", value="val1"),
+            ContextVar(name="var2", value="val2"),
+        ],
     )
-    repo.save_report_settings(updated)
 
-    # Verify only 1 row exists in table (id=1)
-    count = conn.execute("SELECT COUNT(*) FROM report_settings").fetchone()[0]
-    assert count == 1
+    task1 = MailTask(
+        id="TASK-1",
+        max_retries=1,
+        priority="low",
+        schedule_ref="SCHED-01",
+        sender="sender1@example.com",
+        recipients=Recipients(
+            to=["to1_a@example.com", "to1_b@example.com"],
+            cc=[],
+            bcc=["bcc1@example.com"],
+        ),
+        subject="Subject 1",
+        body_template=BodyTemplate(format="text", template_path="tpl1.txt"),
+        context_variables=[],
+    )
 
-    # Verify raw database row values
-    row = conn.execute(
-        "SELECT id, recipient, sender, subject_prefix, include_full_error_trace "
-        "FROM report_settings WHERE id = 1"
-    ).fetchone()
-    assert row["recipient"] == "second@example.com"
-    assert row["sender"] == "sender2@example.com"
-    assert row["subject_prefix"] == "[V2]"
-    assert row["include_full_error_trace"] == 1  # Saved as int 1 when True
+    # Save configuration containing task2 and task1
+    mail_config = MailConfiguration(
+        report_settings=ReportSettings(recipient="admin@example.com"),
+        tasks=[task2, task1],
+    )
+    repo.save_mail_configuration(mail_config)
 
-    # Verify retrieved model matches updated settings
-    retrieved = repo.get_report_settings()
-    assert retrieved == updated
+    tasks = repo.get_mail_tasks()
+    assert len(tasks) == 2
+
+    # Tasks should be ordered by ID ('TASK-1' before 'TASK-2')
+    t1 = tasks[0]
+    assert t1.id == "TASK-1"
+    assert t1.max_retries == 1
+    assert t1.priority == "low"
+    assert t1.schedule_ref == "SCHED-01"
+    assert t1.sender == "sender1@example.com"
+    assert t1.subject == "Subject 1"
+    assert t1.body_template.format == "text"
+    assert t1.body_template.template_path == "tpl1.txt"
+    assert t1.recipients.to == ["to1_a@example.com", "to1_b@example.com"]
+    assert t1.recipients.cc == []
+    assert t1.recipients.bcc == ["bcc1@example.com"]
+    assert t1.context_variables == []
+
+    t2 = tasks[1]
+    assert t2.id == "TASK-2"
+    assert t2.max_retries == 5
+    assert t2.priority == "high"
+    assert t2.schedule_ref == "SCHED-01"
+    assert t2.sender == "sender2@example.com"
+    assert t2.subject == "Subject 2"
+    assert t2.body_template.format == "html"
+    assert t2.body_template.template_path == "tpl2.html"
+    assert t2.recipients.to == ["to2@example.com"]
+    assert t2.recipients.cc == ["cc2@example.com"]
+    assert t2.recipients.bcc == ["bcc2@example.com"]
+    assert len(t2.context_variables) == 2
+    assert t2.context_variables[0].name == "var1"
+    assert t2.context_variables[0].value == "val1"
+    assert t2.context_variables[1].name == "var2"
+    assert t2.context_variables[1].value == "val2"
