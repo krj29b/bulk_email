@@ -4,6 +4,7 @@ import logging
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,7 @@ class TemplateRenderer:
             msg = f"Access denied for template path outside base directory: {template_path}"
             raise ValueError(msg) from exc
 
-        template = self.env.get_template(str(rel_path))
+        template = self.env.get_template(rel_path.as_posix())
         return template.render(**context)
 
 
@@ -53,6 +54,8 @@ def build_email_message(
     msg["To"] = ", ".join(task.recipients.to)
     if task.recipients.cc:
         msg["Cc"] = ", ".join(task.recipients.cc)
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid()
 
     body_format = task.body_template.format.lower()
     if body_format == "html":

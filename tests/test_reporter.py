@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -76,7 +77,7 @@ def test_render_report_success() -> None:
     assert "BulkMailer Task Completion Status Report" in txt_content
 
 
-def test_render_report_fallback() -> None:
+def test_render_report_fallback(caplog: pytest.LogCaptureFixture) -> None:
     report_settings = ReportSettings(
         recipient="admin@example.com",
         sender="mailer@example.com",
@@ -92,7 +93,41 @@ def test_render_report_fallback() -> None:
 
     # Non-existent template directory forces Jinja environment lookup to fail
     gen = ReportGenerator(template_dir="non_existent_dir_12345")
-    html_content, txt_content = gen.render_report(report, report_settings)
+    with caplog.at_level("DEBUG"):
+        html_content, txt_content = gen.render_report(report, report_settings)
 
     assert html_content == "<h2>BulkMailer Report</h2><p>Tasks total: 1, Success: 1, Failed: 0</p>"
     assert txt_content == "BulkMailer Report\nTasks total: 1, Success: 1, Failed: 0"
+    assert "Falling back to default report content for report_email.html.j2" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_send_report_headers() -> None:
+    report_settings = ReportSettings(
+        recipient="admin@example.com",
+        sender="mailer@example.com",
+        subject_prefix="[TEST]",
+        include_full_error_trace=True,
+    )
+    t1 = datetime(2026, 10, 17, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 17, 10, 1, tzinfo=UTC)
+    report = aggregate_summary_report([], t1, t2)
+
+    gen = ReportGenerator(template_dir="templates")
+    mock_mailer = AsyncMailer(Settings(), dry_run=True)
+
+    sent_msg = None
+
+    async def mock_send(
+        msg: Any, sender: str, recipients: list[str]
+    ) -> tuple[bool, str | None, dict[str, Any]]:
+        nonlocal sent_msg
+        sent_msg = msg
+        return True, None, {}
+
+    mock_mailer.send_single_message = mock_send  # type: ignore[method-assign]
+
+    await gen.send_report(report, report_settings, mock_mailer)
+    assert sent_msg is not None
+    assert sent_msg["Date"] is not None and len(sent_msg["Date"]) > 0
+    assert sent_msg["Message-ID"] is not None and len(sent_msg["Message-ID"]) > 0
