@@ -72,7 +72,11 @@ def test_repository_save_and_get_mail_config() -> None:
                 id="TASK-1",
                 schedule_ref="SCHED-01",
                 sender="sender@example.com",
-                recipients=Recipients(to=["user1@example.com"], cc=["user2@example.com"]),
+                recipients=Recipients(
+                    to=["to1@example.com", "to2@example.com"],
+                    cc=["cc1@example.com"],
+                    bcc=["bcc1@example.com"],
+                ),
                 subject="Test Subject",
                 body_template=BodyTemplate(template_path="tpl.j2"),
                 context_variables=[ContextVar(name="k1", value="v1")],
@@ -86,9 +90,21 @@ def test_repository_save_and_get_mail_config() -> None:
     assert loaded.report_settings.recipient == "admin@example.com"
     assert len(loaded.tasks) == 1
     assert loaded.tasks[0].id == "TASK-1"
-    assert loaded.tasks[0].recipients.to == ["user1@example.com"]
-    assert loaded.tasks[0].recipients.cc == ["user2@example.com"]
+    assert loaded.tasks[0].recipients.to == ["to1@example.com", "to2@example.com"]
+    assert loaded.tasks[0].recipients.cc == ["cc1@example.com"]
+    assert loaded.tasks[0].recipients.bcc == ["bcc1@example.com"]
     assert loaded.tasks[0].context_variables[0].name == "k1"
+
+    rows = conn.execute(
+        "SELECT recipient_type, email, seq FROM task_recipients "
+        "WHERE task_id = 'TASK-1' ORDER BY seq"
+    ).fetchall()
+    assert [dict(r) for r in rows] == [
+        {"recipient_type": "to", "email": "to1@example.com", "seq": 0},
+        {"recipient_type": "to", "email": "to2@example.com", "seq": 1},
+        {"recipient_type": "cc", "email": "cc1@example.com", "seq": 2},
+        {"recipient_type": "bcc", "email": "bcc1@example.com", "seq": 3},
+    ]
 
 
 def test_repository_log_execution() -> None:
@@ -171,3 +187,46 @@ def test_repository_get_report_settings_default_and_saved() -> None:
     assert loaded_updated.sender == "notifications@company.com"
     assert loaded_updated.subject_prefix == "[Updated Report]"
     assert loaded_updated.include_full_error_trace is True
+
+
+def test_get_task_execution_states() -> None:
+    conn = get_connection(":memory:")
+    init_db(conn)
+    repo = DatabaseRepository(conn)
+
+    schedules = WorkSchedules(
+        schedules=[Schedule(id="SCHED-01", allowed_hours=[HourWindow(start="00:00", end="23:59")])]
+    )
+    repo.save_work_schedules(schedules)
+
+    mail_config = MailConfiguration(
+        report_settings=ReportSettings(recipient="admin@example.com"),
+        tasks=[
+            MailTask(
+                id="TASK-1",
+                schedule_ref="SCHED-01",
+                sender="sender@example.com",
+                recipients=Recipients(to=["user1@example.com"]),
+                subject="Test Subject",
+                body_template=BodyTemplate(template_path="tpl.j2"),
+            )
+        ],
+    )
+    repo.save_mail_configuration(mail_config)
+
+    states = repo.get_task_execution_states()
+    assert "TASK-1" in states
+    assert states["TASK-1"] == (None, None)
+
+    res = TaskExecutionResult(
+        task_id="TASK-1",
+        status=TaskExecutionStatus.SUCCESS,
+        sent_count=1,
+        duration_ms=10.0,
+    )
+    repo.log_task_execution(res, batch_id="B1")
+
+    updated_states = repo.get_task_execution_states()
+    last_run_dt, last_status = updated_states["TASK-1"]
+    assert last_run_dt is not None
+    assert last_status == TaskExecutionStatus.SUCCESS

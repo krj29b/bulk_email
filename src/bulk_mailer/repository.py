@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from collections import defaultdict
+from datetime import UTC, datetime
 from typing import Literal
 
 from bulk_mailer.models import (
@@ -161,6 +162,41 @@ class DatabaseRepository:
 
     # --- MailConfiguration & MailTask Operations ---
 
+    def _get_task_recipients(self, task_id: str) -> Recipients:
+        rec_rows = self.conn.execute(
+            """
+            SELECT recipient_type, email FROM task_recipients
+            WHERE task_id = ? ORDER BY seq, id
+            """,
+            (task_id,),
+        ).fetchall()
+
+        to_list: list[str] = []
+        cc_list: list[str] = []
+        bcc_list: list[str] = []
+        for rec in rec_rows:
+            rtype = rec["recipient_type"]
+            email = rec["email"]
+            if rtype == "to":
+                to_list.append(email)
+            elif rtype == "cc":
+                cc_list.append(email)
+            elif rtype == "bcc":
+                bcc_list.append(email)
+
+        return Recipients(to=to_list, cc=cc_list, bcc=bcc_list)
+
+    def _get_task_context_variables(self, task_id: str) -> list[ContextVar]:
+        var_rows = self.conn.execute(
+            """
+            SELECT var_name, var_value FROM task_context_variables
+            WHERE task_id = ? ORDER BY seq, id
+            """,
+            (task_id,),
+        ).fetchall()
+
+        return [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
+
     def get_mail_tasks(self) -> list[MailTask]:
         task_rows = self.conn.execute(
             """
@@ -171,40 +207,49 @@ class DatabaseRepository:
             """
         ).fetchall()
 
+        if not task_rows:
+            return []
+
+        task_ids = [r["id"] for r in task_rows]
+        placeholders = ",".join("?" for _ in task_ids)
+
+        rec_rows = self.conn.execute(
+            f"""
+            SELECT task_id, recipient_type, email FROM task_recipients
+            WHERE task_id IN ({placeholders})
+            ORDER BY seq, id
+            """,
+            task_ids,
+        ).fetchall()
+
+        recipients_by_task: dict[str, dict[str, list[str]]] = defaultdict(
+            lambda: {"to": [], "cc": [], "bcc": []}
+        )
+        for rec in rec_rows:
+            rtype = rec["recipient_type"]
+            if rtype in recipients_by_task[rec["task_id"]]:
+                recipients_by_task[rec["task_id"]][rtype].append(rec["email"])
+
+        var_rows = self.conn.execute(
+            f"""
+            SELECT task_id, var_name, var_value FROM task_context_variables
+            WHERE task_id IN ({placeholders})
+            ORDER BY seq, id
+            """,
+            task_ids,
+        ).fetchall()
+
+        vars_by_task: dict[str, list[ContextVar]] = defaultdict(list)
+        for v in var_rows:
+            vars_by_task[v["task_id"]].append(
+                ContextVar(name=v["var_name"], value=v["var_value"])
+            )
+
         tasks: list[MailTask] = []
         for r in task_rows:
             task_id = r["id"]
-
-            rec_rows = self.conn.execute(
-                """
-                SELECT recipient_type, email FROM task_recipients
-                WHERE task_id = ? ORDER BY seq, id
-                """,
-                (task_id,),
-            ).fetchall()
-
-            to_list: list[str] = []
-            cc_list: list[str] = []
-            bcc_list: list[str] = []
-            for rec in rec_rows:
-                rtype = rec["recipient_type"]
-                email = rec["email"]
-                if rtype == "to":
-                    to_list.append(email)
-                elif rtype == "cc":
-                    cc_list.append(email)
-                elif rtype == "bcc":
-                    bcc_list.append(email)
-
-            var_rows = self.conn.execute(
-                """
-                SELECT var_name, var_value FROM task_context_variables
-                WHERE task_id = ? ORDER BY seq, id
-                """,
-                (task_id,),
-            ).fetchall()
-
-            context_vars = [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
+            recipients = self._get_task_recipients(task_id)
+            context_vars = self._get_task_context_variables(task_id)
 
             tasks.append(
                 MailTask(
@@ -213,7 +258,7 @@ class DatabaseRepository:
                     priority=r["priority"],
                     schedule_ref=r["schedule_ref"],
                     sender=r["sender"],
-                    recipients=Recipients(to=to_list, cc=cc_list, bcc=bcc_list),
+                    recipients=recipients,
                     subject=r["subject"],
                     body_template=BodyTemplate(
                         format=r["body_format"], template_path=r["body_template_path"]
@@ -243,72 +288,89 @@ class DatabaseRepository:
                 self.conn.execute("DELETE FROM tasks")
 
             for task in mail_config.tasks:
-                self.conn.execute(
-                    """
-                    INSERT INTO tasks
-                    (id, max_retries, priority, schedule_ref, sender, subject,
-                     body_format, body_template_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        max_retries = excluded.max_retries,
-                        priority = excluded.priority,
-                        schedule_ref = excluded.schedule_ref,
-                        sender = excluded.sender,
-                        subject = excluded.subject,
-                        body_format = excluded.body_format,
-                        body_template_path = excluded.body_template_path
-                    """,
-                    (
-                        task.id,
-                        task.max_retries,
-                        task.priority,
-                        task.schedule_ref,
-                        task.sender,
-                        task.subject,
-                        task.body_template.format,
-                        task.body_template.template_path,
-                    ),
-                )
+                self._save_task(task, mode=mode)
 
-                if mode == "upsert":
-                    self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
-                    self.conn.execute(
-                        "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
-                    )
+    def _save_task(
+        self,
+        task: MailTask,
+        mode: Literal["upsert", "replace"] = "upsert",
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO tasks
+            (id, max_retries, priority, schedule_ref, sender, subject,
+             body_format, body_template_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                max_retries = excluded.max_retries,
+                priority = excluded.priority,
+                schedule_ref = excluded.schedule_ref,
+                sender = excluded.sender,
+                subject = excluded.subject,
+                body_format = excluded.body_format,
+                body_template_path = excluded.body_template_path
+            """,
+            (
+                task.id,
+                task.max_retries,
+                task.priority,
+                task.schedule_ref,
+                task.sender,
+                task.subject,
+                task.body_template.format,
+                task.body_template.template_path,
+            ),
+        )
+
+        if mode == "upsert":
+            self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
+            self.conn.execute(
+                "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
+            )
 
                 # Insert recipients
-                seq = 0
-                recipients_data = []
-                for email in task.recipients.to:
-                    recipients_data.append((task.id, "to", email, seq))
-                    seq += 1
-                for email in task.recipients.cc:
-                    recipients_data.append((task.id, "cc", email, seq))
-                    seq += 1
-                for email in task.recipients.bcc:
-                    recipients_data.append((task.id, "bcc", email, seq))
-                    seq += 1
-
-                if recipients_data:
-                    self.conn.executemany(
-                        "INSERT INTO task_recipients "
-                        "(task_id, recipient_type, email, seq) VALUES (?, ?, ?, ?)",
-                        recipients_data,
-                    )
-
-                # Insert context variables
-                context_vars_data = [
-                    (task.id, var.name, var.value, seq_var)
-                    for seq_var, var in enumerate(task.context_variables)
+                recipients_list = [
+                    (rtype, email)
+                    for rtype, emails in [
+                        ("to", task.recipients.to),
+                        ("cc", task.recipients.cc),
+                        ("bcc", task.recipients.bcc),
+                    ]
+                    for email in emails
                 ]
-                if context_vars_data:
-                    self.conn.executemany(
-                        """
-                        INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        context_vars_data,
-                    )
+                recipients_data = [
+                    (task.id, rtype, email, seq)
+                    for seq, (rtype, email) in enumerate(recipients_list)
+                ]
+
+                for seq_var, var in enumerate(task.context_variables):
+                    context_vars_data.append((task.id, var.name, var.value, seq_var))
+
+            if recipients_data:
+                self.conn.executemany(
+                    """
+                    INSERT INTO task_recipients
+                    (task_id, recipient_type, email, seq)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    recipients_data,
+                )
+
+    def _save_task_context_variables(
+        self, task_id: str, context_vars: list[ContextVar]
+    ) -> None:
+        context_vars_data = [
+            (task_id, var.name, var.value, seq_var)
+            for seq_var, var in enumerate(context_vars)
+        ]
+        if context_vars_data:
+            self.conn.executemany(
+                """
+                INSERT INTO task_context_variables (task_id, var_name, var_value, seq)
+                VALUES (?, ?, ?, ?)
+                """,
+                context_vars_data,
+            )
 
     # --- Execution History / Logs ---
 
@@ -338,16 +400,48 @@ class DatabaseRepository:
                 ),
             )
 
+            now_utc_str = datetime.now(UTC).isoformat()
             self.conn.execute(
                 """
                 UPDATE tasks
-                SET last_run = CURRENT_TIMESTAMP,
+                SET last_run = ?,
                     last_status = ?,
                     last_error = ?
                 WHERE id = ?
                 """,
-                (result.status.value, result.error_details, result.task_id),
+                (now_utc_str, result.status.value, result.error_details, result.task_id),
             )
+
+    def get_task_execution_states(
+        self,
+    ) -> dict[str, tuple[datetime | None, TaskExecutionStatus | None]]:
+        rows = self.conn.execute("SELECT id, last_run, last_status FROM tasks").fetchall()
+        states: dict[str, tuple[datetime | None, TaskExecutionStatus | None]] = {}
+
+        for r in rows:
+            task_id = r["id"]
+            raw_last_run = r["last_run"]
+            raw_last_status = r["last_status"]
+
+            last_run_dt: datetime | None = None
+            if raw_last_run:
+                try:
+                    dt = datetime.fromisoformat(str(raw_last_run).replace("Z", "+00:00"))
+                    dt = dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+                    last_run_dt = dt
+                except ValueError:
+                    last_run_dt = None
+
+            last_status: TaskExecutionStatus | None = None
+            if raw_last_status:
+                try:
+                    last_status = TaskExecutionStatus(raw_last_status)
+                except ValueError:
+                    last_status = None
+
+            states[task_id] = (last_run_dt, last_status)
+
+        return states
 
     def get_execution_results_for_batch(self, batch_id: str) -> list[TaskExecutionResult]:
         rows = self.conn.execute(

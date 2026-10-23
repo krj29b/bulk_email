@@ -1,10 +1,17 @@
 import asyncio
 import sqlite3
 import time as time_module
-from datetime import datetime, time
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from bulk_mailer.models import HourWindow, MailTask, Schedule, WorkSchedules, parse_time_str
+from bulk_mailer.models import (
+    HourWindow,
+    MailTask,
+    Schedule,
+    TaskExecutionStatus,
+    WorkSchedules,
+    parse_time_str,
+)
 from bulk_mailer.repository import DatabaseRepository
 
 __all__ = [
@@ -75,7 +82,11 @@ class TaskScheduler:
         }
 
     def is_task_eligible(
-        self, task: MailTask, reference_dt: datetime | None = None
+        self,
+        task: MailTask,
+        reference_dt: datetime | None = None,
+        last_run: datetime | None = None,
+        last_status: TaskExecutionStatus | str | None = None,
     ) -> tuple[bool, HourWindow | None]:
         schedule = self._schedules_by_id.get(task.schedule_ref)
         if not schedule:
@@ -89,7 +100,40 @@ class TaskScheduler:
             reference_dt = reference_dt.astimezone(self.timezone)
 
         window = get_active_window(schedule, reference_dt)
-        if window is not None:
-            return True, window
+        if window is None:
+            return False, None
 
-        return False, None
+        # Check idempotency: if last execution was SUCCESS in the current window instance
+        is_success = (
+            last_status == TaskExecutionStatus.SUCCESS
+            or (isinstance(last_status, str) and last_status.upper() == "SUCCESS")
+        )
+        if is_success and last_run is not None:
+            if last_run.tzinfo is None:
+                last_run_tz = last_run.replace(tzinfo=UTC).astimezone(self.timezone)
+            else:
+                last_run_tz = last_run.astimezone(self.timezone)
+
+            start_t = window.start_time
+            end_t = window.end_time
+            ref_date = reference_dt.date()
+
+            if start_t <= end_t:
+                window_start_dt = datetime.combine(ref_date, start_t, tzinfo=self.timezone)
+                window_end_dt = datetime.combine(ref_date, end_t, tzinfo=self.timezone)
+            else:
+                if reference_dt.time() >= start_t:
+                    window_start_dt = datetime.combine(ref_date, start_t, tzinfo=self.timezone)
+                    window_end_dt = datetime.combine(
+                        ref_date + timedelta(days=1), end_t, tzinfo=self.timezone
+                    )
+                else:
+                    window_start_dt = datetime.combine(
+                        ref_date - timedelta(days=1), start_t, tzinfo=self.timezone
+                    )
+                    window_end_dt = datetime.combine(ref_date, end_t, tzinfo=self.timezone)
+
+            if window_start_dt <= last_run_tz <= window_end_dt:
+                return False, None
+
+        return True, window
