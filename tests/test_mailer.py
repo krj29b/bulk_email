@@ -263,3 +263,72 @@ async def test_async_mailer_partial_delivery(tmp_path: Path) -> None:
     assert mock_smtp.send_message.call_count == 2
     second_call_recipients = mock_smtp.send_message.call_args_list[1].kwargs["recipients"]
     assert second_call_recipients == ["user2@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_permanent_5xx_smtp_error_no_retry(tmp_path: Path) -> None:
+    tpl_file = tmp_path / "test.j2"
+    tpl_file.write_text("Hello {{ name }}!")
+
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = True
+    smtp_exc = aiosmtplib.SMTPResponseException(550, "User unknown")
+    mock_smtp.send_message = AsyncMock(side_effect=smtp_exc)
+
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=False, smtp_client=mock_smtp)
+
+    task = MailTask(
+        id="TASK-PERM-550",
+        max_retries=3,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["unknown@example.com"]),
+        subject="Test Permanent Error",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+
+    result = await mailer.dispatch_task(task)
+    assert result.status == TaskExecutionStatus.FAILED
+    assert result.sent_count == 0
+    assert result.attempt_count == 1
+    assert "SMTP error 550" in (result.error_details or "")
+
+
+@pytest.mark.asyncio
+async def test_transient_4xx_smtp_error_retries_fully(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tpl_file = tmp_path / "test.j2"
+    tpl_file.write_text("Hello {{ name }}!")
+
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = True
+    smtp_exc = aiosmtplib.SMTPResponseException(421, "Service not available")
+    mock_smtp.send_message = AsyncMock(side_effect=smtp_exc)
+
+    mock_sleep = AsyncMock()
+    monkeypatch.setattr("asyncio.sleep", mock_sleep)
+
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=False, smtp_client=mock_smtp)
+
+    task = MailTask(
+        id="TASK-TRANSIENT-421",
+        max_retries=3,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["user@example.com"]),
+        subject="Test Transient Error",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+
+    result = await mailer.dispatch_task(task)
+    assert result.status == TaskExecutionStatus.FAILED
+    assert result.sent_count == 0
+    assert result.attempt_count == 4
+    assert "SMTP error 421" in (result.error_details or "")
