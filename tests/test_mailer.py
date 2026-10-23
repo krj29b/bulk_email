@@ -265,7 +265,7 @@ async def test_async_mailer_partial_delivery(tmp_path: Path) -> None:
     mock_smtp = AsyncMock()
     mock_smtp.is_connected = True
 
-    errors_dict = {"user2@example.com": (550, "User unknown")}
+    errors_dict = {"user2@example.com": (450, "Mailbox busy")}
     mock_smtp.send_message = AsyncMock(return_value=(errors_dict, "250 OK"))
 
     mailer = AsyncMailer(settings, renderer=renderer, dry_run=False, smtp_client=mock_smtp)
@@ -291,6 +291,61 @@ async def test_async_mailer_partial_delivery(tmp_path: Path) -> None:
     assert mock_smtp.send_message.call_count == 2
     second_call_recipients = mock_smtp.send_message.call_args_list[1].kwargs["recipients"]
     assert second_call_recipients == ["user2@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_partial_delivery_permanent_5xx_no_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tpl_file = tmp_path / "test.j2"
+    tpl_file.write_text("Hello {{ name }}!")
+
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+
+    mock_smtp = AsyncMock()
+    mock_smtp.is_connected = True
+
+    mock_sleep = AsyncMock()
+    monkeypatch.setattr("asyncio.sleep", mock_sleep)
+
+    first_attempt_errors = {
+        "temp_fail_450@example.com": (450, "Temporary failure"),
+        "perm_fail_550@example.com": (550, "User unknown"),
+    }
+    second_attempt_errors: dict[str, Any] = {}
+
+    mock_smtp.send_message = AsyncMock(
+        side_effect=[
+            (first_attempt_errors, "250 OK"),
+            (second_attempt_errors, "250 OK"),
+        ]
+    )
+
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=False, smtp_client=mock_smtp)
+
+    task = MailTask(
+        id="TASK-PARTIAL-550-NO-RETRY",
+        max_retries=2,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(
+            to=["ok@example.com", "temp_fail_450@example.com", "perm_fail_550@example.com"]
+        ),
+        subject="Test Partial Permanent 5xx",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+
+    result = await mailer.dispatch_task(task)
+
+    assert result.status == TaskExecutionStatus.PARTIAL
+    assert result.sent_count == 2
+    assert result.failed_recipients == ["perm_fail_550@example.com"]
+    assert result.attempt_count == 2
+
+    assert mock_smtp.send_message.call_count == 2
+    second_call_recipients = mock_smtp.send_message.call_args_list[1].kwargs["recipients"]
+    assert second_call_recipients == ["temp_fail_450@example.com"]
 
 
 @pytest.mark.asyncio
