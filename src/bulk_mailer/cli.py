@@ -106,7 +106,10 @@ async def run_dispatch_pipeline(
                 key = (task.schedule_ref, window.start, window.end)
                 if key not in window_controls:
                     window_controls[key] = (
-                        TokenBucketRateLimiter(window.rate_limit_per_min),
+                        TokenBucketRateLimiter(
+                            window.rate_limit_per_min,
+                            initial_tokens=float(window.max_concurrency),
+                        ),
                         asyncio.Semaphore(window.max_concurrency),
                     )
                 rate_limiter, semaphore = window_controls[key]

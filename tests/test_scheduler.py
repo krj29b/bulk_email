@@ -406,3 +406,23 @@ async def test_rate_limiter() -> None:
         await limiter.acquire()
     elapsed = asyncio.get_event_loop().time() - start
     assert elapsed < 1.0
+
+
+def test_token_bucket_initial_tokens() -> None:
+    # When initial_tokens is None, tokens defaults to capacity
+    limiter_default = TokenBucketRateLimiter(rate_limit_per_min=60)
+    assert limiter_default.capacity == 60.0
+    assert limiter_default.tokens == 60.0
+
+    # When initial_tokens is explicitly provided
+    limiter_custom = TokenBucketRateLimiter(rate_limit_per_min=60, initial_tokens=5.0)
+    assert limiter_custom.capacity == 60.0
+    assert limiter_custom.tokens == 5.0
+
+    # When initial_tokens exceeds capacity, it is capped at capacity
+    limiter_capped = TokenBucketRateLimiter(rate_limit_per_min=60, initial_tokens=100.0)
+    assert limiter_capped.tokens == 60.0
+
+    # When initial_tokens is negative, it is clamped to 0.0
+    limiter_neg = TokenBucketRateLimiter(rate_limit_per_min=60, initial_tokens=-10.0)
+    assert limiter_neg.tokens == 0.0
