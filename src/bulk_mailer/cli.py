@@ -127,36 +127,37 @@ async def run_dispatch_pipeline(
             f"Scheduled {len(eligible_tasks)} tasks for execution ({len(results)} skipped)."
         )
 
-        # Concurrent task execution using asyncio.TaskGroup
-        async def _execute_single_task(
-            task: MailTask,
-            rate_limiter: TokenBucketRateLimiter,
-            sem: asyncio.Semaphore,
-        ) -> TaskExecutionResult:
-            async with sem:
-                logger.info(f"Executing task {task.id}...")
-                res = await mailer.dispatch_task(task, rate_limiter=rate_limiter)
-                repo.log_task_execution(res, batch_id=batch_id)
-                return res
+        async with mailer:
+            # Concurrent task execution using asyncio.TaskGroup
+            async def _execute_single_task(
+                task: MailTask,
+                rate_limiter: TokenBucketRateLimiter,
+                sem: asyncio.Semaphore,
+            ) -> TaskExecutionResult:
+                async with sem:
+                    logger.info(f"Executing task {task.id}...")
+                    res = await mailer.dispatch_task(task, rate_limiter=rate_limiter)
+                    repo.log_task_execution(res, batch_id=batch_id)
+                    return res
 
-        if eligible_tasks:
-            exec_results: list[TaskExecutionResult] = []
-            async with asyncio.TaskGroup() as tg:
-                tasks_tg = [
-                    tg.create_task(_execute_single_task(t, rl, sem))
-                    for t, rl, sem in eligible_tasks
-                ]
-            for completed_task in tasks_tg:
-                exec_results.append(completed_task.result())
+            if eligible_tasks:
+                exec_results: list[TaskExecutionResult] = []
+                async with asyncio.TaskGroup() as tg:
+                    tasks_tg = [
+                        tg.create_task(_execute_single_task(t, rl, sem))
+                        for t, rl, sem in eligible_tasks
+                    ]
+                for completed_task in tasks_tg:
+                    exec_results.append(completed_task.result())
 
-            results.extend(exec_results)
+                results.extend(exec_results)
 
-        end_time = datetime.now(UTC)
+            end_time = datetime.now(UTC)
 
-        # Aggregate report and send
-        report = aggregate_summary_report(results, start_time, end_time)
-        reporter = ReportGenerator()
-        await reporter.send_report(report, mail_config.report_settings, mailer)
+            # Aggregate report and send
+            report = aggregate_summary_report(results, start_time, end_time)
+            reporter = ReportGenerator()
+            await reporter.send_report(report, mail_config.report_settings, mailer)
 
         logger.info("Bulk mailer execution complete.")
         return 0 if report.failed_tasks == 0 else 2

@@ -76,6 +76,31 @@ class AsyncMailer:
         self.renderer = renderer or TemplateRenderer()
         self.dry_run = dry_run
         self._custom_smtp_client = smtp_client
+        self._in_context = False
+        self._pool: asyncio.Queue[Any] | None = None
+
+    async def __aenter__(self) -> "AsyncMailer":
+        self._in_context = True
+        self._pool = asyncio.Queue()
+        return self
+
+    async def __aexit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: Any,
+    ) -> None:
+        self._in_context = False
+        if self._pool is not None:
+            while not self._pool.empty():
+                try:
+                    client = self._pool.get_nowait()
+                    if getattr(client, "is_connected", False):
+                        with contextlib.suppress(Exception):
+                            await client.quit()
+                except asyncio.QueueEmpty:
+                    break
+            self._pool = None
 
     @staticmethod
     def _is_permanent_smtp_error(errors: dict[str, Any]) -> bool:
@@ -113,16 +138,81 @@ class AsyncMailer:
             )
             return True, None, {}
 
+        if self._custom_smtp_client is not None:
+            client = self._custom_smtp_client
+            try:
+                if not getattr(client, "is_connected", False):
+                    await client.connect()
+                    if self.settings.smtp_user and self.settings.smtp_password:
+                        await client.login(self.settings.smtp_user, self.settings.smtp_password)
+
+                res = await client.send_message(msg, sender=sender, recipients=recipients)
+                errors: dict[str, Any] = {}
+                if isinstance(res, tuple) and len(res) == 2 and isinstance(res[0], dict):
+                    errors = res[0]
+
+                if errors:
+                    return True, f"Partial delivery errors: {list(errors.keys())}", errors
+                return True, None, {}
+            except aiosmtplib.SMTPResponseException as exc:
+                return False, f"SMTP error {exc.code}: {exc.message}", {"smtp_code": exc.code}
+            except aiosmtplib.SMTPException as exc:
+                return False, f"SMTP Exception: {exc}", {}
+            except Exception as exc:
+                return False, f"Network/Connection error: {exc}", {}
+
+        if self._in_context and self._pool is not None:
+            try:
+                client = self._pool.get_nowait()
+            except asyncio.QueueEmpty:
+                client = self._get_smtp_connection()
+
+            keep_client = True
+            try:
+                if not getattr(client, "is_connected", False):
+                    await client.connect()
+                    if self.settings.smtp_user and self.settings.smtp_password:
+                        await client.login(self.settings.smtp_user, self.settings.smtp_password)
+
+                res = await client.send_message(msg, sender=sender, recipients=recipients)
+                errors = {}
+                if isinstance(res, tuple) and len(res) == 2 and isinstance(res[0], dict):
+                    errors = res[0]
+
+                if errors:
+                    return True, f"Partial delivery errors: {list(errors.keys())}", errors
+                return True, None, {}
+            except aiosmtplib.SMTPServerDisconnected as exc:
+                keep_client = False
+                return False, f"SMTP Exception: {exc}", {}
+            except aiosmtplib.SMTPResponseException as exc:
+                if not getattr(client, "is_connected", False):
+                    keep_client = False
+                return False, f"SMTP error {exc.code}: {exc.message}", {"smtp_code": exc.code}
+            except aiosmtplib.SMTPException as exc:
+                if not getattr(client, "is_connected", False):
+                    keep_client = False
+                return False, f"SMTP Exception: {exc}", {}
+            except Exception as exc:
+                keep_client = False
+                return False, f"Network/Connection error: {exc}", {}
+            finally:
+                if keep_client and getattr(client, "is_connected", False):
+                    self._pool.put_nowait(client)
+                else:
+                    if getattr(client, "is_connected", False):
+                        with contextlib.suppress(Exception):
+                            await client.quit()
+
         client = self._get_smtp_connection()
         try:
-            # Connect and send
             if not getattr(client, "is_connected", False):
                 await client.connect()
                 if self.settings.smtp_user and self.settings.smtp_password:
                     await client.login(self.settings.smtp_user, self.settings.smtp_password)
 
             res = await client.send_message(msg, sender=sender, recipients=recipients)
-            errors: dict[str, Any] = {}
+            errors = {}
             if isinstance(res, tuple) and len(res) == 2 and isinstance(res[0], dict):
                 errors = res[0]
 
@@ -136,7 +226,7 @@ class AsyncMailer:
         except Exception as exc:
             return False, f"Network/Connection error: {exc}", {}
         finally:
-            if self._custom_smtp_client is None and getattr(client, "is_connected", False):
+            if getattr(client, "is_connected", False):
                 with contextlib.suppress(Exception):
                     await client.quit()
 

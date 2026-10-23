@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from bulk_mailer.database import get_connection, init_db
 from bulk_mailer.models import (
     BodyTemplate,
@@ -26,7 +28,7 @@ def test_database_init() -> None:
     assert "execution_logs" in tables
 
 
-def test_get_connection_pragmas(tmp_path) -> None:
+def test_get_connection_pragmas(tmp_path: Path) -> None:
     # Memory connection check
     mem_conn = get_connection(":memory:")
     busy_timeout = mem_conn.execute("PRAGMA busy_timeout;").fetchone()[0]

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 
 import aiosmtplib
@@ -332,3 +333,136 @@ async def test_transient_4xx_smtp_error_retries_fully(
     assert result.sent_count == 0
     assert result.attempt_count == 4
     assert "SMTP error 421" in (result.error_details or "")
+
+
+@pytest.mark.asyncio
+async def test_async_mailer_context_manager_reuse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tpl_file = tmp_path / "test.j2"
+    tpl_file.write_text("Hello {{ name }}!")
+
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+
+    # Mock aiosmtplib.SMTP class
+    class FakeSMTP:
+        def __init__(self, *args: list[Any], **kwargs: dict[str, Any]) -> None:
+            self.is_connected = False
+            self.connect_calls = 0
+            self.quit_calls = 0
+            self.send_calls = 0
+
+        async def connect(self) -> None:
+            pass
+
+        async def login(self, u: str, p: str) -> None:
+            pass
+
+        async def send_message(
+            self, msg: Any, sender: str, recipients: list[str]
+        ) -> tuple[dict[str, Any], str]:
+            self.send_calls += 1
+            return ({}, "OK")
+
+        async def quit(self) -> None:
+            self.quit_calls += 1
+            self.is_connected = False
+
+    fake_client = FakeSMTP()
+
+    async def mock_connect() -> None:
+        fake_client.connect_calls += 1
+        fake_client.is_connected = True
+
+    fake_client.connect = mock_connect  # type: ignore
+
+    monkeypatch.setattr("aiosmtplib.SMTP", lambda *a, **kw: fake_client)
+
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=False)
+
+    task = MailTask(
+        id="TASK-CTX",
+        max_retries=0,
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["user@example.com"]),
+        subject="Test CTX",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+
+    async with mailer:
+        for _ in range(5):
+            res = await mailer.dispatch_task(task)
+            assert res.status == TaskExecutionStatus.SUCCESS
+
+    # Connect should have been called only once, quit only once at exit
+    assert fake_client.connect_calls == 1
+    assert fake_client.send_calls == 5
+    assert fake_client.quit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_async_mailer_context_manager_reconnect_on_disconnect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tpl_file = tmp_path / "test.j2"
+    tpl_file.write_text("Hello {{ name }}!")
+
+    settings = Settings()
+    renderer = TemplateRenderer(template_dir=tmp_path)
+
+    clients = []
+
+    class FakeSMTP:
+        def __init__(self, *args: list[Any], **kwargs: dict[str, Any]) -> None:
+            self.is_connected = False
+            self.connect_calls = 0
+            self.quit_calls = 0
+            self.send_calls = 0
+            clients.append(self)
+
+        async def connect(self) -> None:
+            self.connect_calls += 1
+            self.is_connected = True
+
+        async def login(self, u: str, p: str) -> None:
+            pass
+
+        async def send_message(
+            self, msg: Any, sender: str, recipients: list[str]
+        ) -> tuple[dict[str, Any], str]:
+            self.send_calls += 1
+            if self.send_calls == 1 and len(clients) == 1:
+                # Disconnect on first send attempt on client 1
+                self.is_connected = False
+                raise aiosmtplib.SMTPServerDisconnected("Disconnected")
+            return ({}, "OK")
+
+        async def quit(self) -> None:
+            self.quit_calls += 1
+            self.is_connected = False
+
+    monkeypatch.setattr("aiosmtplib.SMTP", FakeSMTP)
+
+    mailer = AsyncMailer(settings, renderer=renderer, dry_run=False)
+
+    task = MailTask(
+        id="TASK-DISCONNECT",
+        max_retries=1,  # Allows retry
+        schedule_ref="SCHED-1",
+        sender="sender@example.com",
+        recipients=Recipients(to=["user@example.com"]),
+        subject="Test Disconnect",
+        body_template=BodyTemplate(template_path="test.j2"),
+    )
+
+    async with mailer:
+        res = await mailer.dispatch_task(task)
+        assert res.status == TaskExecutionStatus.SUCCESS
+
+    # Two clients created: first failed due to disconnect, second succeeded on retry
+    assert len(clients) == 2
+    assert clients[0].connect_calls == 1
+    assert clients[1].connect_calls == 1
+    assert clients[1].send_calls == 1
