@@ -270,6 +270,134 @@ def test_is_task_eligible_unknown_schedule_ref() -> None:
     assert window is None
 
 
+def test_is_task_eligible_idempotency_same_window() -> None:
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
+                ],
+            )
+        ],
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="SCHED-MORNING",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2"),
+    )
+
+    # Oct 17, 2026 at 08:00 Warsaw time
+    ref_dt = datetime(2026, 10, 17, 8, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+
+    # 1. No last run -> eligible
+    eligible, window = scheduler.is_task_eligible(task, reference_dt=ref_dt)
+    assert eligible is True
+    assert window is not None
+
+    # 2. Last run was at 07:00 today (inside 06:00-12:00 window) with SUCCESS -> NOT eligible
+    last_run_today = datetime(2026, 10, 17, 7, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+    eligible, window = scheduler.is_task_eligible(
+        task, reference_dt=ref_dt, last_run=last_run_today, last_status="SUCCESS"
+    )
+    assert eligible is False
+    assert window is None
+
+    # 3. Last run was at 07:00 yesterday with SUCCESS -> eligible
+    last_run_yesterday = datetime(2026, 10, 16, 7, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+    eligible, window = scheduler.is_task_eligible(
+        task, reference_dt=ref_dt, last_run=last_run_yesterday, last_status="SUCCESS"
+    )
+    assert eligible is True
+    assert window is not None
+
+
+def test_is_task_eligible_idempotency_overnight_window() -> None:
+    schedules = WorkSchedules(
+        timezone="UTC",
+        schedules=[
+            Schedule(
+                id="SCHED-NIGHT",
+                allowed_hours=[
+                    HourWindow(start="22:00", end="04:00", max_concurrency=1, rate_limit_per_min=10)
+                ],
+            )
+        ],
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="SCHED-NIGHT",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2"),
+    )
+
+    # Night run 1: 2026-10-17 at 23:00 UTC
+    ref_dt_night1 = datetime(2026, 10, 17, 23, 0, tzinfo=ZoneInfo("UTC"))
+    last_run = datetime(2026, 10, 17, 22, 30, tzinfo=ZoneInfo("UTC"))
+
+    # Ran in current 22:00-04:00 window instance -> NOT eligible
+    eligible, _ = scheduler.is_task_eligible(
+        task, reference_dt=ref_dt_night1, last_run=last_run, last_status="SUCCESS"
+    )
+    assert eligible is False
+
+    # Check at 02:00 on Oct 18 UTC (same overnight window instance 22:00-04:00) -> NOT eligible
+    ref_dt_after_midnight = datetime(2026, 10, 18, 2, 0, tzinfo=ZoneInfo("UTC"))
+    eligible, _ = scheduler.is_task_eligible(
+        task, reference_dt=ref_dt_after_midnight, last_run=last_run, last_status="SUCCESS"
+    )
+    assert eligible is False
+
+    # Check next night at 23:00 on Oct 18 UTC (new overnight window instance) -> eligible
+    ref_dt_next_night = datetime(2026, 10, 18, 23, 0, tzinfo=ZoneInfo("UTC"))
+    eligible, window = scheduler.is_task_eligible(
+        task, reference_dt=ref_dt_next_night, last_run=last_run, last_status="SUCCESS"
+    )
+    assert eligible is True
+    assert window is not None
+
+
+def test_is_task_eligible_idempotency_failed_status() -> None:
+    schedules = WorkSchedules(
+        timezone="Europe/Warsaw",
+        schedules=[
+            Schedule(
+                id="SCHED-MORNING",
+                allowed_hours=[
+                    HourWindow(start="06:00", end="12:00", max_concurrency=5, rate_limit_per_min=60)
+                ],
+            )
+        ],
+    )
+    scheduler = TaskScheduler(schedules)
+    task = MailTask(
+        id="T1",
+        schedule_ref="SCHED-MORNING",
+        sender="s@example.com",
+        recipients=Recipients(to=["r@example.com"]),
+        subject="Subject",
+        body_template=BodyTemplate(template_path="t.j2"),
+    )
+
+    ref_dt = datetime(2026, 10, 17, 8, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+    last_run_today = datetime(2026, 10, 17, 7, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+
+    # FAILED status -> task should still be eligible to retry
+    eligible, window = scheduler.is_task_eligible(
+        task, reference_dt=ref_dt, last_run=last_run_today, last_status="FAILED"
+    )
+    assert eligible is True
+    assert window is not None
+
+
 @pytest.mark.asyncio
 async def test_rate_limiter() -> None:
     limiter = TokenBucketRateLimiter(rate_limit_per_min=6000)  # fast limit for test
