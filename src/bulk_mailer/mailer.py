@@ -77,6 +77,16 @@ class AsyncMailer:
         self.dry_run = dry_run
         self._custom_smtp_client = smtp_client
 
+    @staticmethod
+    def _is_permanent_smtp_error(errors: dict[str, Any]) -> bool:
+        smtp_code = errors.get("smtp_code")
+        if smtp_code is None:
+            return False
+        try:
+            return 500 <= int(smtp_code) < 600
+        except (ValueError, TypeError):
+            return False
+
     def _get_smtp_connection(self) -> Any:
         if self._custom_smtp_client is not None:
             return self._custom_smtp_client
@@ -120,7 +130,7 @@ class AsyncMailer:
                 return True, f"Partial delivery errors: {list(errors.keys())}", errors
             return True, None, {}
         except aiosmtplib.SMTPResponseException as exc:
-            return False, f"SMTP error {exc.code}: {exc.message}", {}
+            return False, f"SMTP error {exc.code}: {exc.message}", {"smtp_code": exc.code}
         except aiosmtplib.SMTPException as exc:
             return False, f"SMTP Exception: {exc}", {}
         except Exception as exc:
@@ -200,6 +210,8 @@ class AsyncMailer:
                 logger.warning(
                     f"Task {task.id} attempt {attempts}/{max_attempts} failed: {error_msg}"
                 )
+                if self._is_permanent_smtp_error(errors):
+                    break
 
             if attempts < max_attempts and pending_recipients:
                 # Exponential backoff: 0.5s, 1s, 2s...
