@@ -180,3 +180,62 @@ def test_cli_import_and_export_closes_connection(tmp_path: Path) -> None:
     # Check that database file can be removed (unlocked)
     db_file.unlink()
     assert not db_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_task_priority_scheduling_order(tmp_path: Path) -> None:
+    tasks_xml = tmp_path / "tasks.xml"
+    schedules_xml = tmp_path / "schedules.xml"
+
+    # task_a has priority low, task_z has priority high
+    tasks_xml.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<MailConfiguration>
+  <ReportSettings>
+    <Recipient>admin@example.com</Recipient>
+  </ReportSettings>
+  <Tasks>
+    <MailTask id="task_a" priority="low" schedule_ref="SCHED-01">
+      <Sender>noreply@example.com</Sender>
+      <Recipients><To>u1@example.com</To></Recipients>
+      <Subject>Task A</Subject>
+      <BodyTemplate format="html">tpl.j2</BodyTemplate>
+    </MailTask>
+    <MailTask id="task_z" priority="high" schedule_ref="SCHED-01">
+      <Sender>noreply@example.com</Sender>
+      <Recipients><To>u2@example.com</To></Recipients>
+      <Subject>Task Z</Subject>
+      <BodyTemplate format="html">tpl.j2</BodyTemplate>
+    </MailTask>
+  </Tasks>
+</MailConfiguration>""")
+
+    # max_concurrency = 1 ensures tasks run sequentially through the semaphore
+    schedules_xml.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="UTC">
+  <Schedule id="SCHED-01">
+    <AllowedHours>
+      <HourWindow start="00:00" end="23:59" max_concurrency="1" rate_limit_per_min="60"/>
+    </AllowedHours>
+  </Schedule>
+</WorkSchedules>""")
+
+    from bulk_mailer.models import MailTask, TaskExecutionResult, TaskExecutionStatus
+
+    executed_order: list[str] = []
+
+    async def fake_dispatch(task: MailTask, rate_limiter: object = None) -> TaskExecutionResult:
+        executed_order.append(task.id)
+        return TaskExecutionResult(
+            task_id=task.id,
+            status=TaskExecutionStatus.SUCCESS,
+            sent_count=1,
+            duration_ms=1.0,
+        )
+
+    db_path = str(tmp_path / "test.db")
+    with patch("bulk_mailer.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch):
+        code = await run_dispatch_pipeline(
+            tasks_xml, schedules_xml, dry_run=True, db_path=db_path
+        )
+        assert code == 0
+        assert executed_order == ["task_z", "task_a"]
