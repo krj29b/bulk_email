@@ -2,8 +2,9 @@ from datetime import datetime, time
 from enum import StrEnum
 from functools import cached_property, lru_cache
 from typing import Self
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_xml import BaseXmlModel, attr, element, wrapped
 
@@ -15,17 +16,39 @@ class TaskExecutionStatus(StrEnum):
     SKIPPED_SCHEDULE = "SKIPPED_SCHEDULE"
 
 
+def _check_no_newlines(value: str | None, field_name: str) -> None:
+    if value is not None and ("\r" in value or "\n" in value):
+        msg = (
+            f"Field '{field_name}' contains illegal newline characters "
+            "(SMTP injection prevention)"
+        )
+        raise ValueError(msg)
+
+
 class ReportSettings(BaseXmlModel, tag="ReportSettings"):
     recipient: str = element(tag="Recipient")
     sender: str | None = element(tag="Sender", default=None)
     subject_prefix: str = element(tag="SubjectPrefix", default="[BulkMailer Report]")
     include_full_error_trace: bool = element(tag="IncludeFullErrorTrace", default=True)
 
+    @model_validator(mode="after")
+    def validate_no_newlines(self) -> Self:
+        _check_no_newlines(self.recipient, "recipient")
+        _check_no_newlines(self.sender, "sender")
+        return self
+
 
 class Recipients(BaseXmlModel, tag="Recipients"):
     to: list[str] = element(tag="To", default_factory=list)
     cc: list[str] = element(tag="Cc", default_factory=list)
     bcc: list[str] = element(tag="Bcc", default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_no_newlines(self) -> Self:
+        for field_name, addr_list in [("to", self.to), ("cc", self.cc), ("bcc", self.bcc)]:
+            for addr in addr_list:
+                _check_no_newlines(addr, field_name)
+        return self
 
     @property
     def all_recipients(self) -> list[str]:
@@ -55,6 +78,12 @@ class MailTask(BaseXmlModel, tag="MailTask"):
         "ContextVariables", element(tag="Var", default_factory=list), default_factory=list
     )
 
+    @model_validator(mode="after")
+    def validate_no_newlines(self) -> Self:
+        _check_no_newlines(self.sender, "sender")
+        _check_no_newlines(self.subject, "subject")
+        return self
+
     def get_context_dict(self) -> dict[str, str]:
         return {var.name: var.value for var in self.context_variables}
 
@@ -66,11 +95,18 @@ class MailConfiguration(BaseXmlModel, tag="MailConfiguration"):
 
 @lru_cache(maxsize=1024)
 def parse_time_str(time_str: str) -> time:
+    if not isinstance(time_str, str):
+        raise ValueError(f"Time value must be a string, got {type(time_str)}")
     parts = time_str.strip().split(":")
-    hour = int(parts[0])
-    minute = int(parts[1])
-    second = int(parts[2]) if len(parts) > 2 else 0
-    return time(hour, minute, second)
+    if len(parts) not in (2, 3):
+        raise ValueError(f"Invalid time format '{time_str}'. Expected 'HH:MM' or 'HH:MM:SS'.")
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+        second = int(parts[2]) if len(parts) == 3 else 0
+        return time(hour, minute, second)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid time string '{time_str}': {exc}") from exc
 
 
 class HourWindow(BaseXmlModel, tag="HourWindow"):
@@ -78,6 +114,16 @@ class HourWindow(BaseXmlModel, tag="HourWindow"):
     end: str = attr()
     max_concurrency: int = attr(default=1)
     rate_limit_per_min: int = attr(default=60)
+
+    @model_validator(mode="after")
+    def validate_hour_window(self) -> Self:
+        parse_time_str(self.start)
+        parse_time_str(self.end)
+        if self.max_concurrency < 1:
+            raise ValueError(f"max_concurrency must be >= 1, got {self.max_concurrency}")
+        if self.rate_limit_per_min < 0:
+            raise ValueError(f"rate_limit_per_min must be >= 0, got {self.rate_limit_per_min}")
+        return self
 
     @cached_property
     def start_time(self) -> time:
@@ -99,6 +145,14 @@ class Schedule(BaseXmlModel, tag="Schedule"):
 class WorkSchedules(BaseXmlModel, tag="WorkSchedules"):
     timezone: str = attr(default="UTC")
     schedules: list[Schedule] = element(tag="Schedule", default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_timezone(self) -> Self:
+        try:
+            ZoneInfo(self.timezone)
+        except Exception as exc:
+            raise ValueError(f"Invalid timezone '{self.timezone}': {exc}") from exc
+        return self
 
 
 class TaskExecutionResult(BaseModel):

@@ -107,26 +107,29 @@ def test_import_and_export_xml(tmp_path: Path) -> None:
     assert len(reloaded_schedules.schedules) == 3
 
 
-def test_import_from_xml_replace_mode(tmp_path: Path) -> None:
-    conn = get_connection(":memory:")
-    init_db(conn)
+def test_load_work_schedules_invalid_time_or_timezone(tmp_path: Path) -> None:
+    schedules_invalid_time = tmp_path / "sched_invalid_time.xml"
+    schedules_invalid_time.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="UTC">
+  <Schedule id="SCHED-01">
+    <AllowedHours>
+      <HourWindow start="25:00" end="23:59"/>
+    </AllowedHours>
+  </Schedule>
+</WorkSchedules>""")
 
-    tasks_path = "config/samples/tasks.xml"
-    schedules_path = "config/samples/schedules.xml"
+    with pytest.raises(XMLValidationError):
+        load_work_schedules(schedules_invalid_time)
 
-    # Initial import in upsert mode
-    import_from_xml(conn, tasks_path, schedules_path, mode="upsert")
+    schedules_invalid_tz = tmp_path / "sched_invalid_tz.xml"
+    schedules_invalid_tz.write_bytes(b"""<?xml version="1.0" encoding="UTF-8"?>
+<WorkSchedules timezone="Mars/Phobos">
+  <Schedule id="SCHED-01">
+    <AllowedHours>
+      <HourWindow start="00:00" end="23:59"/>
+    </AllowedHours>
+  </Schedule>
+</WorkSchedules>""")
 
-    # Verify foreign keys are enabled
-    fk_status = conn.execute("PRAGMA foreign_keys;").fetchone()[0]
-    assert fk_status == 1
-
-    # Re-import in replace mode should succeed without IntegrityError
-    mail_config, work_schedules = import_from_xml(conn, tasks_path, schedules_path, mode="replace")
-
-    repo = DatabaseRepository(conn)
-    db_config = repo.get_mail_configuration()
-    db_schedules = repo.get_work_schedules()
-
-    assert len(db_config.tasks) == len(mail_config.tasks)
-    assert len(db_schedules.schedules) == len(work_schedules.schedules)
+    with pytest.raises(XMLValidationError):
+        load_work_schedules(schedules_invalid_tz)

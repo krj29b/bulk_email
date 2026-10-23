@@ -1,11 +1,16 @@
 from datetime import time
 
+import pytest
+from pydantic import ValidationError
+
 from bulk_mailer.models import (
     BodyTemplate,
     ContextVar,
     HourWindow,
     MailTask,
     Recipients,
+    ReportSettings,
+    WorkSchedules,
     parse_time_str,
 )
 
@@ -100,8 +105,64 @@ def test_parse_time_str() -> None:
     assert parse_time_str("09:30") == time(9, 30, 0)
     assert parse_time_str("18:45:30") == time(18, 45, 30)
 
+    with pytest.raises(ValueError):
+        parse_time_str("12")
+
+    with pytest.raises(ValueError):
+        parse_time_str("25:00")
+
+    with pytest.raises(ValueError):
+        parse_time_str("invalid")
+
 
 def test_hour_window_start_and_end_time() -> None:
     hw = HourWindow(start="08:00:00", end="17:00:00")
     assert hw.start_time == time(8, 0, 0)
     assert hw.end_time == time(17, 0, 0)
+
+
+def test_hour_window_validation() -> None:
+    with pytest.raises(ValidationError):
+        HourWindow(start="25:00", end="17:00")
+
+    with pytest.raises(ValidationError):
+        HourWindow(start="08:00", end="17:00", max_concurrency=0)
+
+    with pytest.raises(ValidationError):
+        HourWindow(start="08:00", end="17:00", rate_limit_per_min=-1)
+
+
+def test_work_schedules_timezone_validation() -> None:
+    ws = WorkSchedules(timezone="UTC")
+    assert ws.timezone == "UTC"
+
+    with pytest.raises(ValidationError):
+        WorkSchedules(timezone="Mars/Phobos")
+
+
+def test_smtp_header_injection_validation() -> None:
+    with pytest.raises(ValidationError):
+        MailTask(
+            id="T1",
+            schedule_ref="S1",
+            sender="sender\r\nInjected-Header: bad",
+            recipients=Recipients(to=["user@example.com"]),
+            subject="Valid Subject",
+            body_template=BodyTemplate(template_path="tpl.html"),
+        )
+
+    with pytest.raises(ValidationError):
+        MailTask(
+            id="T2",
+            schedule_ref="S1",
+            sender="sender@example.com",
+            recipients=Recipients(to=["user@example.com"]),
+            subject="Subject\nInjected-Header: bad",
+            body_template=BodyTemplate(template_path="tpl.html"),
+        )
+
+    with pytest.raises(ValidationError):
+        Recipients(to=["user@example.com\r\nBcc: evil@example.com"])
+
+    with pytest.raises(ValidationError):
+        ReportSettings(recipient="admin@example.com\nSubject: Hacked")
