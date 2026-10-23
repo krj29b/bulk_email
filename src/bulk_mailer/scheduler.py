@@ -40,10 +40,15 @@ def get_active_window(schedule: Schedule, dt: datetime) -> HourWindow | None:
 
 
 class TokenBucketRateLimiter:
-    def __init__(self, rate_limit_per_min: int) -> None:
+    def __init__(
+        self, rate_limit_per_min: int, initial_tokens: float | None = None
+    ) -> None:
         self.rate_limit_per_min = rate_limit_per_min
         self.capacity = float(max(1, rate_limit_per_min))
-        self.tokens = self.capacity
+        if initial_tokens is None:
+            self.tokens = self.capacity
+        else:
+            self.tokens = min(self.capacity, float(max(0.0, initial_tokens)))
         self.fill_rate = self.capacity / 60.0  # tokens per second
         self.last_update = time_module.monotonic()
         self._lock = asyncio.Lock()
