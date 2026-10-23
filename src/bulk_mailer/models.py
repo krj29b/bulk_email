@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_xml import BaseXmlModel, attr, element, wrapped
 
+PRIORITY_ORDER: dict[str, int] = {"high": 0, "normal": 1, "low": 2}
+
 
 class TaskExecutionStatus(StrEnum):
     SUCCESS = "SUCCESS"

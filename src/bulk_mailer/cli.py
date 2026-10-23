@@ -12,6 +12,7 @@ import typer
 from bulk_mailer.database import get_connection, init_db
 from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
 from bulk_mailer.models import (
+    PRIORITY_ORDER,
     MailTask,
     Settings,
     TaskExecutionResult,
@@ -141,6 +142,12 @@ async def run_dispatch_pipeline(
                     return res
 
             if eligible_tasks:
+                eligible_tasks.sort(
+                    key=lambda item: (
+                        PRIORITY_ORDER.get(item[0].priority.lower(), 1),
+                        item[0].id,
+                    )
+                )
                 exec_results: list[TaskExecutionResult] = []
                 async with asyncio.TaskGroup() as tg:
                     tasks_tg = [
