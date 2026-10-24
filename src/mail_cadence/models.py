@@ -21,8 +21,7 @@ class TaskExecutionStatus(StrEnum):
 def _check_no_newlines(value: str | None, field_name: str) -> None:
     if value is not None and ("\r" in value or "\n" in value):
         msg = (
-            f"Field '{field_name}' contains illegal newline characters "
-            "(SMTP injection prevention)"
+            f"Field '{field_name}' contains illegal newline characters (SMTP injection prevention)"
         )
         raise ValueError(msg)
 

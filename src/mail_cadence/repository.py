@@ -150,8 +150,8 @@ class DatabaseRepository:
         )
 
     def save_report_settings(self, settings: ReportSettings) -> None:
-            with self.conn:
-                self._save_report_settings(settings)
+        with self.conn:
+            self._save_report_settings(settings)
 
     def _save_report_settings(self, settings: ReportSettings) -> None:
         self.conn.execute(
@@ -214,9 +214,7 @@ class DatabaseRepository:
 
         vars_by_task: dict[str, list[ContextVar]] = defaultdict(list)
         for v in var_rows:
-            vars_by_task[v["task_id"]].append(
-                ContextVar(name=v["var_name"], value=v["var_value"])
-            )
+            vars_by_task[v["task_id"]].append(ContextVar(name=v["var_name"], value=v["var_value"]))
 
         tasks: list[MailTask] = []
         for r in task_rows:
@@ -306,9 +304,7 @@ class DatabaseRepository:
 
         if mode == "upsert":
             self.conn.execute("DELETE FROM task_recipients WHERE task_id = ?", (task.id,))
-            self.conn.execute(
-                "DELETE FROM task_context_variables WHERE task_id = ?", (task.id,)
-            )
+            self.conn.execute("DELETE FROM task_context_variables WHERE task_id = ?", (task.id,))
 
         # Insert recipients
         recipients_list = [
@@ -321,8 +317,7 @@ class DatabaseRepository:
             for email in emails
         ]
         recipients_data = [
-            (task.id, rtype, email, seq)
-            for seq, (rtype, email) in enumerate(recipients_list)
+            (task.id, rtype, email, seq) for seq, (rtype, email) in enumerate(recipients_list)
         ]
 
         if recipients_data:
@@ -337,12 +332,9 @@ class DatabaseRepository:
 
         self._save_task_context_variables(task.id, task.context_variables)
 
-    def _save_task_context_variables(
-        self, task_id: str, context_vars: list[ContextVar]
-    ) -> None:
+    def _save_task_context_variables(self, task_id: str, context_vars: list[ContextVar]) -> None:
         context_vars_data = [
-            (task_id, var.name, var.value, seq_var)
-            for seq_var, var in enumerate(context_vars)
+            (task_id, var.name, var.value, seq_var) for seq_var, var in enumerate(context_vars)
         ]
         if context_vars_data:
             self.conn.executemany(
@@ -495,9 +487,7 @@ class DatabaseRepository:
             (task_id,),
         ).fetchall()
 
-        context_vars = [
-            ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows
-        ]
+        context_vars = [ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows]
 
         return MailTask(
             id=r["id"],

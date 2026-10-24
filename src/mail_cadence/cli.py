@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 import typer
 
+from mail_cadence import __version__
 from mail_cadence.database import get_connection, init_db
 from mail_cadence.mailer import AsyncMailer, TemplateRenderer
 from mail_cadence.models import (
@@ -32,6 +33,12 @@ app = typer.Typer(
     help="Asynchronous MailCadence email dispatch and reporting engine",
     invoke_without_command=True,
 )
+
+
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"mail-cadence {__version__}")
+        raise typer.Exit(code=0)
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -174,6 +181,16 @@ async def run_dispatch_pipeline(
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
+    version: Annotated[
+        bool | None,
+        typer.Option(
+            "--version",
+            "-V",
+            help="Show the version and exit.",
+            callback=version_callback,
+            is_eager=True,
+        ),
+    ] = None,
     tasks_xml: Annotated[
         Path | None,
         typer.Option(
@@ -339,8 +356,6 @@ def cli_export_xml(
         except Exception as exc:
             typer.echo(f"Error exporting XML: {exc}", err=True)
             raise typer.Exit(code=1) from exc
-
-
 
 
 @app.command("serve")

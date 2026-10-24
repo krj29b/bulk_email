@@ -236,8 +236,18 @@ async def test_task_priority_scheduling_order(tmp_path: Path) -> None:
 
     db_path = str(tmp_path / "test.db")
     with patch("mail_cadence.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch):
-        code = await run_dispatch_pipeline(
-            tasks_xml, schedules_xml, dry_run=True, db_path=db_path
-        )
+        code = await run_dispatch_pipeline(tasks_xml, schedules_xml, dry_run=True, db_path=db_path)
         assert code == 0
         assert executed_order == ["task_z", "task_a"]
+
+
+def test_cli_version_option() -> None:
+    from mail_cadence import __version__
+
+    res_long = runner.invoke(app, ["--version"])
+    assert res_long.exit_code == 0
+    assert f"mail-cadence {__version__}" in res_long.output
+
+    res_short = runner.invoke(app, ["-V"])
+    assert res_short.exit_code == 0
+    assert f"mail-cadence {__version__}" in res_short.output
