@@ -1,6 +1,6 @@
-# Bulk Mailer Architecture & Technical Documentation
+# MailCadence Architecture & Technical Documentation
 
-Comprehensive, engineering-grade architectural specifications, database schema, data flows, and security controls for the `bulk-mailer` execution engine.
+Comprehensive, engineering-grade architectural specifications, database schema, data flows, and security controls for the `mail-cadence` execution engine.
 
 ---
 
@@ -8,18 +8,18 @@ Comprehensive, engineering-grade architectural specifications, database schema, 
 
 ### Core Modules & Responsibilities
 
-`bulk-mailer` is a high-throughput, asynchronous bulk email dispatch engine written in Python 3.12+. It utilizes SQLite for local state persistence and runtime execution tracking, while retaining XML support for schema-validated configuration import and export.
+`mail-cadence` is a high-throughput, asynchronous bulk email dispatch engine written in Python 3.12+. It utilizes SQLite for local state persistence and runtime execution tracking, while retaining XML support for schema-validated configuration import and export.
 
 | Module | Location | Primary Responsibilities |
 | --- | --- | --- |
-| **CLI & Pipeline Engine** | `src/bulk_mailer/cli.py` | Typer CLI entry points (`dispatch`, `import-xml`, `export-xml`), command-line argument parsing, environment settings resolution, and top-level pipeline orchestration via `run_dispatch_pipeline`. |
-| **XML Loader & Exporter** | `src/bulk_mailer/xml_loader.py` | Secure XML parsing via `defusedxml`, schema validation using `pydantic-xml` models (`MailConfiguration`, `WorkSchedules`), and bidirectional conversion between XML documents and SQLite data models. |
-| **Database & Connection Manager** | `src/bulk_mailer/database.py` | SQLite connection pooling initialization, database schema DDL execution, journal mode (`WAL`), busy timeout settings, and foreign key enforcements. |
-| **Database Repository** | `src/bulk_mailer/repository.py` | Data Access Object (DAO) providing transactional database operations (`upsert`, `replace`, state recovery, execution logging). Uses top-level transaction blocks (`with self.conn:`) to maintain single-statement and batch atomicity. |
-| **Task Scheduler** | `src/bulk_mailer/scheduler.py` | Timezone-aware schedule window evaluation (`zoneinfo`), active execution window calculation (including midnight-spanning window handling), window-level idempotency checking, and token bucket rate-limiting resource management. |
-| **Async Mailer & Renderer** | `src/bulk_mailer/mailer.py` | Async email dispatch engine using `aiosmtplib`, `asyncio.TaskGroup`, `asyncio.Semaphore`, and `TokenBucketRateLimiter`. Handles Jinja2 template rendering (`TemplateRenderer`), MIME message construction, connection pooling (`AsyncMailer._pool`), and exponential backoff retry logic. |
-| **Status Reporter** | `src/bulk_mailer/reporter.py` | Aggregates execution results into `BatchSummaryReport` and generates HTML/plain-text summary reports dispatched to operators upon task batch completion. |
-| **Domain & Data Models** | `src/bulk_mailer/models.py` | Pydantic v2 and `pydantic-xml` models, custom data types (`EmailPriority`, `TaskStatus`, `RecipientType`), string header validators, and Pydantic field transformations. |
+| **CLI & Pipeline Engine** | `src/mail_cadence/cli.py` | Typer CLI entry points (`dispatch`, `import-xml`, `export-xml`), command-line argument parsing, environment settings resolution, and top-level pipeline orchestration via `run_dispatch_pipeline`. |
+| **XML Loader & Exporter** | `src/mail_cadence/xml_loader.py` | Secure XML parsing via `defusedxml`, schema validation using `pydantic-xml` models (`MailConfiguration`, `WorkSchedules`), and bidirectional conversion between XML documents and SQLite data models. |
+| **Database & Connection Manager** | `src/mail_cadence/database.py` | SQLite connection pooling initialization, database schema DDL execution, journal mode (`WAL`), busy timeout settings, and foreign key enforcements. |
+| **Database Repository** | `src/mail_cadence/repository.py` | Data Access Object (DAO) providing transactional database operations (`upsert`, `replace`, state recovery, execution logging). Uses top-level transaction blocks (`with self.conn:`) to maintain single-statement and batch atomicity. |
+| **Task Scheduler** | `src/mail_cadence/scheduler.py` | Timezone-aware schedule window evaluation (`zoneinfo`), active execution window calculation (including midnight-spanning window handling), window-level idempotency checking, and token bucket rate-limiting resource management. |
+| **Async Mailer & Renderer** | `src/mail_cadence/mailer.py` | Async email dispatch engine using `aiosmtplib`, `asyncio.TaskGroup`, `asyncio.Semaphore`, and `TokenBucketRateLimiter`. Handles Jinja2 template rendering (`TemplateRenderer`), MIME message construction, connection pooling (`AsyncMailer._pool`), and exponential backoff retry logic. |
+| **Status Reporter** | `src/mail_cadence/reporter.py` | Aggregates execution results into `BatchSummaryReport` and generates HTML/plain-text summary reports dispatched to operators upon task batch completion. |
+| **Domain & Data Models** | `src/mail_cadence/models.py` | Pydantic v2 and `pydantic-xml` models, custom data types (`EmailPriority`, `TaskStatus`, `RecipientType`), string header validators, and Pydantic field transformations. |
 
 ---
 
@@ -94,7 +94,7 @@ flowchart TB
 
 ### SQLite Pragma & Concurrency Configuration
 
-`bulk-mailer` configures SQLite for high concurrency, durability, and strict integrity via `database.py`:
+`mail-cadence` configures SQLite for high concurrency, durability, and strict integrity via `database.py`:
 
 - **Write-Ahead Logging (`PRAGMA journal_mode = WAL;`)**: Configured for file-backed databases to allow concurrent readers without blocking write transactions.
 - **Busy Timeout (`PRAGMA busy_timeout = 30000;`)**: Wait up to 30,000 ms (30 seconds) on lock contention before raising `sqlite3.OperationalError`.
@@ -131,7 +131,7 @@ erDiagram
         INTEGER id PK "CHECK(id = 1)"
         TEXT recipient NOT NULL
         TEXT sender
-        TEXT subject_prefix NOT NULL "DEFAULT '[BulkMailer Report]'"
+        TEXT subject_prefix NOT NULL "DEFAULT '[MailCadence Report]'"
         BOOLEAN include_full_error_trace NOT NULL "DEFAULT 1"
     }
 
@@ -227,7 +227,7 @@ When importing XML files using `DatabaseRepository.save_mail_configuration` and 
   <ReportSettings>
     <Recipient>ops-alerts@example.com</Recipient>
     <Sender>mailer-daemon@example.com</Sender>
-    <SubjectPrefix>[BulkMailer Status Report]</SubjectPrefix>
+    <SubjectPrefix>[MailCadence Status Report]</SubjectPrefix>
     <IncludeFullErrorTrace>true</IncludeFullErrorTrace>
   </ReportSettings>
   <Tasks>
@@ -402,7 +402,7 @@ stateDiagram-v2
 
 ## 6. Security Architecture
 
-`bulk-mailer` implements defense-in-depth security measures across input processing, file handling, template rendering, and SMTP header construction:
+`mail-cadence` implements defense-in-depth security measures across input processing, file handling, template rendering, and SMTP header construction:
 
 ### 1. XXE & Entity Expansion Protection (`defusedxml`)
 - All XML inputs (`tasks.xml`, `schedules.xml`) are parsed via `defusedxml.ElementTree.fromstring` prior to passing DOM nodes into `pydantic-xml`.

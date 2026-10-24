@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from bulk_mailer.database import get_connection, init_db
-from bulk_mailer.repository import DatabaseRepository
-from bulk_mailer.xml_loader import (
+from mail_cadence.database import get_connection, init_db
+from mail_cadence.repository import DatabaseRepository
+from mail_cadence.xml_loader import (
     export_to_xml,
     import_from_xml,
     load_mail_configuration,
@@ -60,7 +60,7 @@ def test_xml_sqlite_round_trip(tmp_path: Path) -> None:
 def test_cli_import_and_export_subcommands(tmp_path: Path) -> None:
     from typer.testing import CliRunner
 
-    from bulk_mailer.cli import app
+    from mail_cadence.cli import app
 
     runner = CliRunner()
     db_file = tmp_path / "cli_test.db"

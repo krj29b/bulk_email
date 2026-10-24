@@ -1,10 +1,10 @@
-# Bulk Mailer Engine
+# MailCadence Engine
 
 Production-grade, asynchronous bulk email dispatch and reporting engine built in **Python 3.12+**.
 
 ## Overview
 
-`bulk-mailer` is a high-performance email dispatch engine that utilizes SQLite as its primary database backend for runtime configurations and execution history logging, while retaining full XML support for importing and exporting configuration definitions (`tasks.xml` and `schedules.xml`). It evaluates active schedule windows across timezones, dispatches scheduled email tasks concurrently with rate limiting and exponential backoff retry resilience, and sends a final Task Completion Status Report email upon completion.
+`mail-cadence` is a high-performance email dispatch engine that utilizes SQLite as its primary database backend for runtime configurations and execution history logging, while retaining full XML support for importing and exporting configuration definitions (`tasks.xml` and `schedules.xml`). It evaluates active schedule windows across timezones, dispatches scheduled email tasks concurrently with rate limiting and exponential backoff retry resilience, and sends a final Task Completion Status Report email upon completion.
 
 ---
 
@@ -27,7 +27,7 @@ Production-grade, asynchronous bulk email dispatch and reporting engine built in
 
 ### Installation Instructions
 
-Clone the repository and install `bulk-mailer` along with its development dependencies:
+Clone the repository and install `mail-cadence` along with its development dependencies:
 
 ```bash
 # Install in editable mode with development dependencies
@@ -44,11 +44,11 @@ make install
 
 ## Configuration Reference
 
-`bulk-mailer` is configured through environment variables (or a `.env` file) for SMTP server options and database location, alongside XML or database settings.
+`mail-cadence` is configured through environment variables (or a `.env` file) for SMTP server options and database location, alongside XML or database settings.
 
 ### Environment Variables (`Settings`)
 
-Supported environment settings defined in `bulk_mailer.models.Settings`:
+Supported environment settings defined in `mail_cadence.models.Settings`:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -59,20 +59,20 @@ Supported environment settings defined in `bulk_mailer.models.Settings`:
 | `SMTP_USE_TLS` | `false` | Enable direct TLS connection (`true`/`false`) |
 | `SMTP_START_TLS` | `false` | Enable STARTTLS command upgrade (`true`/`false`) |
 | `SMTP_TIMEOUT` | `30.0` | Timeout in seconds for SMTP operations |
-| `BULK_MAILER_DB` | `bulk_mailer.db` | Path to SQLite database file |
+| `MAIL_CADENCE_DB` | `mail_cadence.db` | Path to SQLite database file |
 
 ---
 
-## CLI Usage Guide (`bulk-mailer`)
+## CLI Usage Guide (`mail-cadence`)
 
-The package provides the `bulk-mailer` CLI executable (as well as `python -m bulk_mailer.cli`).
+The package provides the `mail-cadence` CLI executable (as well as `python -m mail_cadence.cli`).
 
 ### 1. Main Dispatch Command
 
 Executes the main bulk mailer dispatch pipeline.
 
 ```bash
-bulk-mailer [OPTIONS]
+mail-cadence [OPTIONS]
 ```
 
 #### Flags & Options
@@ -80,7 +80,7 @@ bulk-mailer [OPTIONS]
 | --- | --- | --- | --- | --- |
 | `--tasks-xml` | `-t` | `PATH` | *None* | Optional path to tasks XML file to seed/upsert database |
 | `--schedule-xml` | `-s` | `PATH` | *None* | Optional path to schedule XML file to seed/upsert database |
-| `--db` | `-b` | `PATH` | `bulk_mailer.db` | Path to SQLite database file (overrides `BULK_MAILER_DB`) |
+| `--db` | `-b` | `PATH` | `mail_cadence.db` | Path to SQLite database file (overrides `MAIL_CADENCE_DB`) |
 | `--dry-run` | `-d` | `FLAG` | `false` | Execute workflow in simulation mode without sending network SMTP requests |
 | `--verbose` | `-v` | `FLAG` | `false` | Enable verbose debug logging output |
 
@@ -92,10 +92,10 @@ bulk-mailer [OPTIONS]
 #### Example Dispatch Commands
 ```bash
 # Execute dispatch and seed XML configurations if database is empty or needs updates
-bulk-mailer --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml
+mail-cadence --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml
 
 # Run dispatch in dry-run mode using an existing SQLite database
-bulk-mailer --db bulk_mailer.db --dry-run --verbose
+mail-cadence --db mail_cadence.db --dry-run --verbose
 ```
 
 ---
@@ -105,7 +105,7 @@ bulk-mailer --db bulk_mailer.db --dry-run --verbose
 Imports task definitions and schedule rules from XML configuration files into the SQLite database.
 
 ```bash
-bulk-mailer import-xml [OPTIONS]
+mail-cadence import-xml [OPTIONS]
 ```
 
 #### Options
@@ -113,12 +113,12 @@ bulk-mailer import-xml [OPTIONS]
 | --- | --- | --- | --- | --- |
 | `--tasks-xml` | `-t` | `PATH` | *None* | Path to tasks configuration XML file |
 | `--schedule-xml` | `-s` | `PATH` | *None* | Path to schedule configuration XML file |
-| `--db` | `-b` | `PATH` | `bulk_mailer.db` | Target SQLite database file path |
+| `--db` | `-b` | `PATH` | `mail_cadence.db` | Target SQLite database file path |
 | `--mode` | `-m` | `CHOICE` | `upsert` | Import mode: `upsert` (update/insert) or `replace` (clear and reload) |
 
 #### Example
 ```bash
-bulk-mailer import-xml --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml --mode upsert
+mail-cadence import-xml --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml --mode upsert
 ```
 
 ---
@@ -128,7 +128,7 @@ bulk-mailer import-xml --tasks-xml config/samples/tasks.xml --schedule-xml confi
 Exports current task definitions, schedules, and report settings from the SQLite database back into XML files.
 
 ```bash
-bulk-mailer export-xml [OPTIONS]
+mail-cadence export-xml [OPTIONS]
 ```
 
 #### Options
@@ -136,11 +136,11 @@ bulk-mailer export-xml [OPTIONS]
 | --- | --- | --- | --- | --- |
 | `--tasks-xml` | `-t` | `PATH` | *None* | Destination path for exported tasks XML |
 | `--schedule-xml` | `-s` | `PATH` | *None* | Destination path for exported schedules XML |
-| `--db` | `-b` | `PATH` | `bulk_mailer.db` | Source SQLite database file path |
+| `--db` | `-b` | `PATH` | `mail_cadence.db` | Source SQLite database file path |
 
 #### Example
 ```bash
-bulk-mailer export-xml --tasks-xml exported_tasks.xml --schedule-xml exported_schedules.xml
+mail-cadence export-xml --tasks-xml exported_tasks.xml --schedule-xml exported_schedules.xml
 ```
 
 ---

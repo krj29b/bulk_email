@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from bulk_mailer.database import get_connection, init_db
-from bulk_mailer.models import (
+from mail_cadence.database import get_connection, init_db
+from mail_cadence.models import (
     HourWindow,
     MailTask,
     ReportSettings,
@@ -13,8 +13,8 @@ from bulk_mailer.models import (
     TaskExecutionStatus,
     WorkSchedules,
 )
-from bulk_mailer.repository import DatabaseRepository
-from bulk_mailer.web import create_app
+from mail_cadence.repository import DatabaseRepository
+from mail_cadence.web import create_app
 
 
 @pytest.fixture

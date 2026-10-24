@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from bulk_mailer.database import get_connection, init_db
-from bulk_mailer.models import (
+from mail_cadence.database import get_connection, init_db
+from mail_cadence.models import (
     BodyTemplate,
     ContextVar,
     HourWindow,
@@ -14,7 +14,7 @@ from bulk_mailer.models import (
     TaskExecutionStatus,
     WorkSchedules,
 )
-from bulk_mailer.repository import DatabaseRepository
+from mail_cadence.repository import DatabaseRepository
 
 
 def test_database_init() -> None:
@@ -176,7 +176,7 @@ def test_repository_get_report_settings_default_and_saved() -> None:
     defaults = repo.get_report_settings()
     assert defaults.recipient == "admin@example.com"
     assert defaults.sender is None
-    assert defaults.subject_prefix == "[BulkMailer Report]"
+    assert defaults.subject_prefix == "[MailCadence Report]"
     assert defaults.include_full_error_trace is True
 
     # 2. Test save_report_settings and get_report_settings with custom values

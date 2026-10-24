@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bulk_mailer.models import (
+from mail_cadence.models import (
     BodyTemplate,
     HourWindow,
     MailTask,
@@ -12,7 +12,7 @@ from bulk_mailer.models import (
     Schedule,
     WorkSchedules,
 )
-from bulk_mailer.scheduler import (
+from mail_cadence.scheduler import (
     TaskScheduler,
     TokenBucketRateLimiter,
     get_active_window,

@@ -30,7 +30,7 @@ def _check_no_newlines(value: str | None, field_name: str) -> None:
 class ReportSettings(BaseXmlModel, tag="ReportSettings"):
     recipient: str = element(tag="Recipient")
     sender: str | None = element(tag="Sender", default=None)
-    subject_prefix: str = element(tag="SubjectPrefix", default="[BulkMailer Report]")
+    subject_prefix: str = element(tag="SubjectPrefix", default="[MailCadence Report]")
     include_full_error_trace: bool = element(tag="IncludeFullErrorTrace", default=True)
 
     @model_validator(mode="after")

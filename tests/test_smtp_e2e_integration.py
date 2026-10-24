@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from bulk_mailer.cli import run_dispatch_pipeline
-from bulk_mailer.database import get_connection
-from bulk_mailer.models import TaskExecutionStatus
-from bulk_mailer.repository import DatabaseRepository
+from mail_cadence.cli import run_dispatch_pipeline
+from mail_cadence.database import get_connection
+from mail_cadence.models import TaskExecutionStatus
+from mail_cadence.repository import DatabaseRepository
 
 
 @dataclass
@@ -61,7 +61,7 @@ async def handle_smtp_session(
             line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
             line_upper = line.upper()
 
-            if line_upper.startswith("EHLO") or line_upper.startswith("HELO"):
+            if line_upper.startswith(("EHLO", "HELO")):
                 writer.write(b"250-127.0.0.1\r\n250 OK\r\n")
                 await writer.drain()
             elif line_upper.startswith("MAIL FROM:"):
@@ -130,7 +130,8 @@ async def smtp_server(
         0,
     )
     sockets = server.sockets
-    assert sockets is not None and len(sockets) > 0
+    assert sockets is not None
+    assert len(sockets) > 0
     port = sockets[0].getsockname()[1]
     controller.port = port
 

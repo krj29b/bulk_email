@@ -12,8 +12,8 @@ from typing import Any
 import aiosmtplib
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from bulk_mailer.models import MailTask, Settings, TaskExecutionResult, TaskExecutionStatus
-from bulk_mailer.scheduler import TokenBucketRateLimiter
+from mail_cadence.models import MailTask, Settings, TaskExecutionResult, TaskExecutionStatus
+from mail_cadence.scheduler import TokenBucketRateLimiter
 
 logger = logging.getLogger(__name__)
 

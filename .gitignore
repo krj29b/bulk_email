@@ -34,10 +34,10 @@ pip-wheel-metadata/
 # 3. SQLite Databases (including PRAGMA journal_mode = WAL files)
 # ==============================================================================
 # Default project database (cli.py) and general SQLite files
-bulk_mailer.db
-bulk_mailer.db-shm
-bulk_mailer.db-wal
-bulk_mailer.db-journal
+mail_cadence.db
+mail_cadence.db-shm
+mail_cadence.db-wal
+mail_cadence.db-journal
 
 *.db
 *.db-shm

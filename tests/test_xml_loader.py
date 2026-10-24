@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from bulk_mailer.database import get_connection, init_db
-from bulk_mailer.repository import DatabaseRepository
-from bulk_mailer.xml_loader import (
+from mail_cadence.database import get_connection, init_db
+from mail_cadence.repository import DatabaseRepository
+from mail_cadence.xml_loader import (
     XMLValidationError,
     _parse_xml_safely,
     export_to_xml,

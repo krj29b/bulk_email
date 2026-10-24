@@ -8,7 +8,7 @@ install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
 test:
-	PYTHONPATH=src $(PYTEST) --cov=src/bulk_mailer --cov-report=term-missing
+	PYTHONPATH=src $(PYTEST) --cov=src/mail_cadence --cov-report=term-missing
 
 lint:
 	ruff check src/ tests/
@@ -26,7 +26,7 @@ audit:
 quality-gate: lint dead-code complexity audit test
 
 run-dry:
-	$(PYTHON) -m bulk_mailer.cli \
+	$(PYTHON) -m mail_cadence.cli \
 		--tasks-xml config/samples/tasks.xml \
 		--schedule-xml config/samples/schedules.xml \
 		--dry-run

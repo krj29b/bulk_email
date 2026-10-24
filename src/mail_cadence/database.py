@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS report_settings (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     recipient TEXT NOT NULL,
     sender TEXT,
-    subject_prefix TEXT NOT NULL DEFAULT '[BulkMailer Report]',
+    subject_prefix TEXT NOT NULL DEFAULT '[MailCadence Report]',
     include_full_error_trace BOOLEAN NOT NULL DEFAULT 1
 );
 

@@ -6,8 +6,8 @@ import aiosmtplib
 import jinja2
 import pytest
 
-from bulk_mailer.mailer import AsyncMailer, TemplateRenderer, build_email_message
-from bulk_mailer.models import BodyTemplate, MailTask, Recipients, Settings, TaskExecutionStatus
+from mail_cadence.mailer import AsyncMailer, TemplateRenderer, build_email_message
+from mail_cadence.models import BodyTemplate, MailTask, Recipients, Settings, TaskExecutionStatus
 
 
 def test_template_renderer(tmp_path: Path) -> None:
@@ -42,8 +42,10 @@ def test_build_email_message_headers() -> None:
     )
     msg = build_email_message(task, "Hello")
 
-    assert msg["Date"] is not None and len(msg["Date"]) > 0
-    assert msg["Message-ID"] is not None and len(msg["Message-ID"]) > 0
+    assert msg["Date"] is not None
+    assert len(msg["Date"]) > 0
+    assert msg["Message-ID"] is not None
+    assert len(msg["Message-ID"]) > 0
 
 
 def test_template_renderer_missing_template_relative(tmp_path: Path) -> None:

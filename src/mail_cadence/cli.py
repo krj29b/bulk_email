@@ -9,27 +9,27 @@ from typing import Annotated, Literal
 
 import typer
 
-from bulk_mailer.database import get_connection, init_db
-from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
-from bulk_mailer.models import (
+from mail_cadence.database import get_connection, init_db
+from mail_cadence.mailer import AsyncMailer, TemplateRenderer
+from mail_cadence.models import (
     PRIORITY_ORDER,
     MailTask,
     Settings,
     TaskExecutionResult,
     TaskExecutionStatus,
 )
-from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
-from bulk_mailer.repository import DatabaseRepository
-from bulk_mailer.scheduler import TaskScheduler, TokenBucketRateLimiter
-from bulk_mailer.xml_loader import (
+from mail_cadence.reporter import ReportGenerator, aggregate_summary_report
+from mail_cadence.repository import DatabaseRepository
+from mail_cadence.scheduler import TaskScheduler, TokenBucketRateLimiter
+from mail_cadence.xml_loader import (
     XMLValidationError,
     export_to_xml,
     import_from_xml,
 )
 
 app = typer.Typer(
-    name="bulk-mailer",
-    help="Asynchronous bulk email dispatch and reporting engine",
+    name="mail-cadence",
+    help="Asynchronous MailCadence email dispatch and reporting engine",
     invoke_without_command=True,
 )
 
@@ -49,13 +49,13 @@ async def run_dispatch_pipeline(
     dry_run: bool = False,
     verbose: bool = False,
     ref_dt: datetime | None = None,
-    db_path: str = "bulk_mailer.db",
+    db_path: str = "mail_cadence.db",
 ) -> int:
     setup_logging(verbose)
-    logger = logging.getLogger("bulk_mailer.cli")
+    logger = logging.getLogger("mail_cadence.cli")
 
     start_time = datetime.now(UTC)
-    logger.info(f"Starting bulk email dispatch engine (dry_run={dry_run}, db={db_path})...")
+    logger.info(f"Starting MailCadence email dispatch engine (dry_run={dry_run}, db={db_path})...")
 
     with closing(get_connection(db_path)) as conn:
         init_db(conn)
@@ -151,14 +151,12 @@ async def run_dispatch_pipeline(
                         item[0].id,
                     )
                 )
-                exec_results: list[TaskExecutionResult] = []
                 async with asyncio.TaskGroup() as tg:
                     tasks_tg = [
                         tg.create_task(_execute_single_task(t, rl, sem))
                         for t, rl, sem in eligible_tasks
                     ]
-                for completed_task in tasks_tg:
-                    exec_results.append(completed_task.result())
+                exec_results = [completed_task.result() for completed_task in tasks_tg]
 
                 results.extend(exec_results)
 
@@ -169,7 +167,7 @@ async def run_dispatch_pipeline(
             reporter = ReportGenerator()
             await reporter.send_report(report, mail_config.report_settings, mailer)
 
-        logger.info("Bulk mailer execution complete.")
+        logger.info("MailCadence execution complete.")
         return 0 if report.failed_tasks == 0 else 2
 
 
@@ -205,10 +203,10 @@ def main(
         typer.Option(
             "--db",
             "-b",
-            envvar="BULK_MAILER_DB",
+            envvar="MAIL_CADENCE_DB",
             help="Path to SQLite database file",
         ),
-    ] = "bulk_mailer.db",
+    ] = "mail_cadence.db",
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -270,10 +268,10 @@ def cli_import_xml(
         typer.Option(
             "--db",
             "-b",
-            envvar="BULK_MAILER_DB",
+            envvar="MAIL_CADENCE_DB",
             help="Path to SQLite database file",
         ),
-    ] = "bulk_mailer.db",
+    ] = "mail_cadence.db",
     mode: Annotated[
         str,
         typer.Option(
@@ -326,10 +324,10 @@ def cli_export_xml(
         typer.Option(
             "--db",
             "-b",
-            envvar="BULK_MAILER_DB",
+            envvar="MAIL_CADENCE_DB",
             help="Path to SQLite database file",
         ),
-    ] = "bulk_mailer.db",
+    ] = "mail_cadence.db",
 ) -> None:
     """Export current SQLite database configuration to XML files."""
     with closing(get_connection(db)) as conn:
@@ -368,10 +366,10 @@ def cli_serve(
         typer.Option(
             "--db",
             "-b",
-            envvar="BULK_MAILER_DB",
+            envvar="MAIL_CADENCE_DB",
             help="Path to SQLite database file",
         ),
-    ] = "bulk_mailer.db",
+    ] = "mail_cadence.db",
     template_dir: Annotated[
         str,
         typer.Option(
@@ -384,7 +382,7 @@ def cli_serve(
     """Launch the web administration and observability panel."""
     import uvicorn
 
-    from bulk_mailer.web import create_app
+    from mail_cadence.web import create_app
 
     with closing(get_connection(db)) as conn:
         init_db(conn)
