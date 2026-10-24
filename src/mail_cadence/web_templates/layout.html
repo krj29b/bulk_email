@@ -1,42 +1,191 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark h-full bg-slate-950 text-slate-100">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}MailCadence Admin{% endblock %}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS Play CDN & Config -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- HTMX & Lucide Icons -->
   <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
   <style>
-    body { padding: 20px; }
-    nav { margin-bottom: 2rem; }
-    .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-    .stat-card { padding: 1rem; border-radius: 8px; border: 1px solid var(--pico-muted-border-color); text-align: center; }
-    .stat-card h3 { margin: 0; font-size: 2rem; }
-    .stat-card p { margin: 0; font-size: 0.9rem; color: var(--pico-muted-color); }
-    .alert-error { background-color: #f8d7da; color: #721c24; padding: 0.75rem 1.25rem; border-radius: 4px; margin-bottom: 1rem; }
-    .alert-success { background-color: #d4edda; color: #155724; padding: 0.75rem 1.25rem; border-radius: 4px; margin-bottom: 1rem; }
-    .badge-success { background-color: #28a745; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-    .badge-failed { background-color: #dc3545; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-    .badge-partial { background-color: #ffc107; color: black; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-    .badge-skipped { background-color: #6c757d; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    /* HTMX Indicator Custom Progress & Spinner Styling */
+    .htmx-indicator {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+    }
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator {
+      display: inline-flex;
+      opacity: 1;
+    }
+
+    /* Global Alert Banners & Semantic Badges for backward compatibility */
+    .alert-success {
+      background-color: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+    .alert-error {
+      background-color: rgba(244, 63, 94, 0.1);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+    .badge-success {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      background-color: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .badge-failed {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      background-color: rgba(244, 63, 94, 0.1);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .badge-partial {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      background-color: rgba(245, 158, 11, 0.1);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .badge-skipped {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      background-color: rgba(100, 116, 139, 0.1);
+      color: #94a3b8;
+      border: 1px solid rgba(51, 65, 85, 0.5);
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
   </style>
 </head>
-<body>
-  <div class="container">
-    <nav>
-      <ul>
-        <li><strong>MailCadence Admin</strong></li>
-      </ul>
-      <ul>
-        <li><a href="/" {% if active_page == 'dashboard' %}class="secondary"{% endif %}>Dashboard</a></li>
-        <li><a href="/tasks" {% if active_page == 'tasks' %}class="secondary"{% endif %}>Tasks</a></li>
-        <li><a href="/schedules" {% if active_page == 'schedules' %}class="secondary"{% endif %}>Schedules</a></li>
-        <li><a href="/settings" {% if active_page == 'settings' %}class="secondary"{% endif %}>Settings</a></li>
-      </ul>
-    </nav>
-    <main>
-      {% block content %}{% endblock %}
+<body class="h-full bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
+  <div class="flex h-screen overflow-hidden">
+    <!-- Fixed Left Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 h-screen sticky top-0">
+      <div class="flex flex-col flex-1 min-h-0">
+        <!-- Brand Header -->
+        <div class="p-5 border-b border-slate-800/80 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
+              <i data-lucide="mail-check" class="w-4 h-4"></i>
+            </div>
+            <span class="font-semibold tracking-tight text-white text-base">MailCadence</span>
+          </div>
+          <span class="font-mono text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">v0.2.0</span>
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <a href="/" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 {% if active_page == 'dashboard' %}bg-slate-800/80 text-white border-l-2 border-indigo-500 font-medium shadow-sm{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border-l-2 border-transparent{% endif %}">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <span>Dashboard</span>
+          </a>
+          <a href="/tasks" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 {% if active_page == 'tasks' %}bg-slate-800/80 text-white border-l-2 border-indigo-500 font-medium shadow-sm{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border-l-2 border-transparent{% endif %}">
+            <i data-lucide="mail" class="w-4 h-4"></i>
+            <span>Tasks</span>
+          </a>
+          <a href="/schedules" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 {% if active_page == 'schedules' %}bg-slate-800/80 text-white border-l-2 border-indigo-500 font-medium shadow-sm{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border-l-2 border-transparent{% endif %}">
+            <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+            <span>Schedules</span>
+          </a>
+          <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 {% if active_page == 'settings' %}bg-slate-800/80 text-white border-l-2 border-indigo-500 font-medium shadow-sm{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border-l-2 border-transparent{% endif %}">
+            <i data-lucide="sliders" class="w-4 h-4"></i>
+            <span>Settings</span>
+          </a>
+        </nav>
+      </div>
+
+      <!-- Engine Status Footer -->
+      <div class="p-4 border-t border-slate-800/80 bg-slate-900/50">
+        <div class="flex items-center gap-2.5 px-2 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+          </span>
+          <span class="text-xs font-mono text-slate-300">SQLite WAL Engine Ready</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 min-w-0 bg-slate-950 text-slate-100 overflow-y-auto">
+      <div class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+        {% block content %}{% endblock %}
+      </div>
     </main>
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    });
+    document.body.addEventListener('htmx:afterSwap', () => {
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    });
+  </script>
 </body>
 </html>
