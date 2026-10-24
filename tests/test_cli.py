@@ -106,7 +106,9 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
         patch("bulk_mailer.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch),
         patch("asyncio.Semaphore", side_effect=tracked_sem),
     ):
-        code = await run_dispatch_pipeline(tasks_xml, schedules_xml, dry_run=True)
+        code = await run_dispatch_pipeline(
+            tasks_xml, schedules_xml, dry_run=True, db_path=str(tmp_path / "test.db")
+        )
         assert code == 0
         assert len(captured_rl) == 2
         # Identical rate limiter instance

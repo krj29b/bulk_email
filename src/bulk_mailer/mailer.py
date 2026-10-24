@@ -147,21 +147,23 @@ class AsyncMailer:
         return aiosmtplib.SMTP(
             hostname=self.settings.smtp_host,
             port=self.settings.smtp_port,
-            username=self.settings.smtp_user,
-            password=self.settings.smtp_password,
+            username=self.settings.smtp_user or None,
+            password=self.settings.smtp_password or None,
             use_tls=self.settings.smtp_use_tls,
             start_tls=self.settings.smtp_start_tls,
             timeout=self.settings.smtp_timeout,
         )
 
+    @staticmethod
+    async def _ensure_connected(client: Any) -> None:
+        if not getattr(client, "is_connected", False):
+            await client.connect()
+
     @contextlib.asynccontextmanager
     async def _acquire_smtp_client(self) -> AsyncIterator[Any]:
         if self._custom_smtp_client is not None:
             client = self._custom_smtp_client
-            if not getattr(client, "is_connected", False):
-                await client.connect()
-                if self.settings.smtp_user and self.settings.smtp_password:
-                    await client.login(self.settings.smtp_user, self.settings.smtp_password)
+            await self._ensure_connected(client)
             yield client
             return
 
@@ -175,10 +177,7 @@ class AsyncMailer:
                     client = self._get_smtp_connection()
 
                 keep_client = True
-                if not getattr(client, "is_connected", False):
-                    await client.connect()
-                    if self.settings.smtp_user and self.settings.smtp_password:
-                        await client.login(self.settings.smtp_user, self.settings.smtp_password)
+                await self._ensure_connected(client)
                 yield client
             except aiosmtplib.SMTPServerDisconnected:
                 keep_client = False
@@ -191,18 +190,14 @@ class AsyncMailer:
                 if client is not None:
                     if keep_client and getattr(client, "is_connected", False):
                         self._pool.put_nowait(client)
-                    else:
-                        if getattr(client, "is_connected", False):
-                            with contextlib.suppress(Exception):
-                                await client.quit()
+                    elif getattr(client, "is_connected", False):
+                        with contextlib.suppress(Exception):
+                            await client.quit()
             return
 
         client = self._get_smtp_connection()
         try:
-            if not getattr(client, "is_connected", False):
-                await client.connect()
-                if self.settings.smtp_user and self.settings.smtp_password:
-                    await client.login(self.settings.smtp_user, self.settings.smtp_password)
+            await self._ensure_connected(client)
             yield client
         finally:
             if getattr(client, "is_connected", False):
@@ -348,6 +343,6 @@ class AsyncMailer:
             sent_count=sent_count,
             failed_recipients=failed_recipients,
             duration_ms=duration_ms,
-            error_details=last_error,
             attempt_count=attempts,
+            error_details=last_error,
         )

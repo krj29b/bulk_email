@@ -136,6 +136,8 @@ async def smtp_server(
 
     monkeypatch.setenv("SMTP_HOST", "127.0.0.1")
     monkeypatch.setenv("SMTP_PORT", str(port))
+    monkeypatch.setenv("SMTP_USER", "")
+    monkeypatch.setenv("SMTP_PASSWORD", "")
     monkeypatch.setenv("SMTP_USE_TLS", "false")
     monkeypatch.setenv("SMTP_START_TLS", "false")
 
