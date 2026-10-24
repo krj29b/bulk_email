@@ -67,9 +67,7 @@ async def test_run_dispatch_pipeline_idempotency_two_runs(tmp_path: Path) -> Non
     assert code2 == 0
 
     # Execution logs should now record SKIPPED_SCHEDULE for the second run
-    logs = conn.execute(
-        "SELECT status FROM execution_logs ORDER BY id DESC LIMIT 2"
-    ).fetchall()
+    logs = conn.execute("SELECT status FROM execution_logs ORDER BY id DESC LIMIT 2").fetchall()
     statuses = [r["status"] for r in logs]
     assert TaskExecutionStatus.SKIPPED_SCHEDULE.value in statuses
 

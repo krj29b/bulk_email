@@ -22,6 +22,8 @@ from mail_cadence.models import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_REPORT_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+
 
 def aggregate_summary_report(
     results: list[TaskExecutionResult],
@@ -48,8 +50,12 @@ def aggregate_summary_report(
 
 
 class ReportGenerator:
-    def __init__(self, template_dir: str | Path = "templates") -> None:
-        self.template_dir = Path(template_dir)
+    def __init__(self, template_dir: str | Path | None = None) -> None:
+        if template_dir is None:
+            self.template_dir = DEFAULT_REPORT_TEMPLATE_DIR
+        else:
+            self.template_dir = Path(template_dir)
+
         if self.template_dir.exists():
             self.env = Environment(
                 loader=FileSystemLoader(str(self.template_dir)),

@@ -40,9 +40,7 @@ def get_active_window(schedule: Schedule, dt: datetime) -> HourWindow | None:
 
 
 class TokenBucketRateLimiter:
-    def __init__(
-        self, rate_limit_per_min: int, initial_tokens: float | None = None
-    ) -> None:
+    def __init__(self, rate_limit_per_min: int, initial_tokens: float | None = None) -> None:
         self.rate_limit_per_min = rate_limit_per_min
         self.capacity = float(max(1, rate_limit_per_min))
         if initial_tokens is None:
@@ -109,9 +107,8 @@ class TaskScheduler:
             return False, None
 
         # Check idempotency: if last execution was SUCCESS in the current window instance
-        is_success = (
-            last_status == TaskExecutionStatus.SUCCESS
-            or (isinstance(last_status, str) and last_status.upper() == "SUCCESS")
+        is_success = last_status == TaskExecutionStatus.SUCCESS or (
+            isinstance(last_status, str) and last_status.upper() == "SUCCESS"
         )
         if is_success and last_run is not None:
             if last_run.tzinfo is None:

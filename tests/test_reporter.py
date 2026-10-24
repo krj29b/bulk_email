@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -49,7 +50,7 @@ async def test_send_report_dry_run() -> None:
     ]
     report = aggregate_summary_report(results, t1, t2)
 
-    gen = ReportGenerator(template_dir="templates")
+    gen = ReportGenerator(template_dir=None)
     mailer = AsyncMailer(Settings(), dry_run=True)
 
     sent = await gen.send_report(report, report_settings, mailer)
@@ -70,7 +71,7 @@ def test_render_report_success() -> None:
     ]
     report = aggregate_summary_report(results, t1, t2)
 
-    gen = ReportGenerator(template_dir="templates")
+    gen = ReportGenerator(template_dir=None)
     html_content, txt_content = gen.render_report(report, report_settings)
 
     assert "MailCadence Task Completion Status Report" in html_content
@@ -113,7 +114,7 @@ async def test_send_report_headers() -> None:
     t2 = datetime(2026, 10, 17, 10, 1, tzinfo=UTC)
     report = aggregate_summary_report([], t1, t2)
 
-    gen = ReportGenerator(template_dir="templates")
+    gen = ReportGenerator(template_dir=None)
     mock_mailer = AsyncMailer(Settings(), dry_run=True)
 
     sent_msg = None
@@ -133,3 +134,27 @@ async def test_send_report_headers() -> None:
     assert len(sent_msg["Date"]) > 0
     assert sent_msg["Message-ID"] is not None
     assert len(sent_msg["Message-ID"]) > 0
+
+
+def test_render_report_default_template_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    report_settings = ReportSettings(
+        recipient="admin@example.com",
+        sender="mailer@example.com",
+        subject_prefix="[TEST]",
+        include_full_error_trace=True,
+    )
+    t1 = datetime(2026, 10, 17, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 17, 10, 1, tzinfo=UTC)
+    results = [
+        TaskExecutionResult(task_id="T1", status=TaskExecutionStatus.SUCCESS, sent_count=1),
+    ]
+    report = aggregate_summary_report(results, t1, t2)
+
+    gen = ReportGenerator()
+    html_content, txt_content = gen.render_report(report, report_settings)
+
+    assert "MailCadence Task Completion Status Report" in html_content
+    assert "MailCadence Task Completion Status Report" in txt_content
