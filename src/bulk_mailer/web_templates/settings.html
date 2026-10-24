@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block title %}Report Settings - BulkMailer Admin{% endblock %}
+{% block content %}
+<h2>Report Settings</h2>
+
+{% if message %}
+<div class="alert-success">{{ message }}</div>
+{% endif %}
+{% if error %}
+<div class="alert-error">{{ error }}</div>
+{% endif %}
+
+<form action="/settings" method="POST" style="max-width: 600px;">
+  <label for="recipient">
+    Recipient Email *
+    <input type="text" id="recipient" name="recipient" value="{{ settings.recipient }}" required>
+  </label>
+
+  <label for="sender">
+    Sender Email (Optional)
+    <input type="text" id="sender" name="sender" value="{{ settings.sender or '' }}">
+  </label>
+
+  <label for="subject_prefix">
+    Subject Prefix
+    <input type="text" id="subject_prefix" name="subject_prefix" value="{{ settings.subject_prefix }}" required>
+  </label>
+
+  <fieldset>
+    <label for="include_full_error_trace">
+      <input type="checkbox" id="include_full_error_trace" name="include_full_error_trace" value="true" {% if settings.include_full_error_trace %}checked{% endif %}>
+      Include full error traces in summary reports
+    </label>
+  </fieldset>
+
+  <button type="submit">Save Report Settings</button>
+</form>
+{% endblock %}
