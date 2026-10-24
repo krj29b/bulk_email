@@ -24,14 +24,21 @@ pip-delete-this-directory.txt
 # testy
 *.coverage
 _coverage
-*.cache
+.cache/
 _trial_temp*
 test/_trial_temp*
 *.test
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.tox/
 
 venv/*
 .venv/
 log/*
+*.log
+logs/
 .idea
 
 _archive
@@ -54,3 +61,10 @@ _profile
 *.sqlite3
 
 .vscode/
+
+.env
+.env.local
+.env.*.local
+
+data/
+
