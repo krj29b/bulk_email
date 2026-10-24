@@ -9,6 +9,7 @@ from mail_cadence.models import (
     MailTask,
     ReportSettings,
     Schedule,
+    Settings,
     TaskExecutionResult,
     TaskExecutionStatus,
     WorkSchedules,
@@ -275,3 +276,91 @@ def test_settings_view_and_update(client: TestClient) -> None:
     v2_resp = client.get("/settings")
     assert v2_resp.status_code == 200
     assert "new_admin@example.com" in v2_resp.text
+
+
+def test_web_basic_auth_disabled_and_enabled(tmp_db_path: Path, tmp_path: Path) -> None:
+    # 1. Unset admin_user / admin_password -> Open access
+    open_app = create_app(
+        db_path=tmp_db_path,
+        template_dir=tmp_path,
+        settings=Settings(admin_user=None, admin_password=None),
+    )
+    open_client = TestClient(open_app)
+    res_open = open_client.get("/")
+    assert res_open.status_code == 200
+
+    # 2. Set admin_user & admin_password -> Protected access
+    auth_settings = Settings(admin_user="admin", admin_password="secret123")  # noqa: S106
+    auth_app = create_app(db_path=tmp_db_path, template_dir=tmp_path, settings=auth_settings)
+    auth_client = TestClient(auth_app)
+
+    # Missing credentials -> 401
+    res_no_auth = auth_client.get("/")
+    assert res_no_auth.status_code == 401
+    assert res_no_auth.headers.get("WWW-Authenticate") == "Basic"
+
+    # Wrong credentials -> 401
+    res_wrong = auth_client.get("/", auth=("admin", "wrong"))
+    assert res_wrong.status_code == 401
+
+    # Correct credentials -> 200
+    res_ok = auth_client.get("/", auth=("admin", "secret123"))
+    assert res_ok.status_code == 200
+
+
+def test_web_dispatch_trigger_run(tmp_db_path: Path, tmp_path: Path) -> None:
+    app = create_app(db_path=tmp_db_path, template_dir=tmp_path)
+    client = TestClient(app)
+
+    # Trigger run with dry_run
+    res = client.post("/dispatch/run", data={"dry_run": "true"})
+    assert res.status_code == 200
+    assert "Manual dispatch completed (dry_run=True)" in res.text
+
+
+def test_web_dispatch_trigger_task_run(tmp_db_path: Path, tmp_path: Path) -> None:
+    conn = get_connection(tmp_db_path)
+    repo = DatabaseRepository(conn)
+    repo.save_single_task(
+        MailTask.model_validate(
+            {
+                "id": "task_single_run",
+                "schedule_ref": "sched_default",
+                "sender": "sender@example.com",
+                "recipients": {"to": ["to@example.com"]},
+                "subject": "Test Task Run",
+                "body_template": {"format": "html", "template_path": "tpl.html"},
+            }
+        )
+    )
+    conn.close()
+
+    app = create_app(db_path=tmp_db_path, template_dir=tmp_path)
+    client = TestClient(app)
+
+    res = client.post("/tasks/task_single_run/run")
+    assert res.status_code == 200
+    assert "task_single_run" in res.text
+
+    # Test 404 for unknown task
+    res_404 = client.post("/tasks/unknown_task/run")
+    assert res_404.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_web_dispatch_lock_conflict(tmp_db_path: Path, tmp_path: Path) -> None:
+    app = create_app(db_path=tmp_db_path, template_dir=tmp_path)
+    client = TestClient(app)
+
+    # Acquire lock manually
+    await app.state.dispatch_lock.acquire()
+    try:
+        res_dispatch = client.post("/dispatch/run")
+        assert res_dispatch.status_code == 409
+        assert "A dispatch batch is already running." in res_dispatch.json()["detail"]
+
+        res_task = client.post("/tasks/sched_default/run")
+        assert res_task.status_code == 409
+        assert "A dispatch batch is already running." in res_task.json()["detail"]
+    finally:
+        app.state.dispatch_lock.release()

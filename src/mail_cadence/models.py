@@ -1,10 +1,10 @@
 from datetime import datetime, time
 from enum import StrEnum
 from functools import cached_property, lru_cache
-from typing import Self
+from typing import Any, Self
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_xml import BaseXmlModel, attr, element, wrapped
 
@@ -110,11 +110,33 @@ def parse_time_str(time_str: str) -> time:
         raise ValueError(f"Invalid time string '{time_str}': {exc}") from exc
 
 
+VALID_WEEKDAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+
 class HourWindow(BaseXmlModel, tag="HourWindow"):
     start: str = attr()
     end: str = attr()
+    days_of_week: str = attr(default="*")
     max_concurrency: int = attr(default=1)
     rate_limit_per_min: int = attr(default=60)
+
+    @field_validator("days_of_week", mode="before")
+    @classmethod
+    def validate_days_of_week(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            raise ValueError(f"days_of_week must be a string, got {type(v)}")
+        v_clean = v.strip().lower()
+        if v_clean == "*":
+            return "*"
+        tokens = [t.strip() for t in v_clean.split(",") if t.strip()]
+        if not tokens:
+            raise ValueError("days_of_week cannot be empty")
+        for token in tokens:
+            if token not in VALID_WEEKDAYS:
+                valid_list = sorted(VALID_WEEKDAYS)
+                msg = f"Invalid weekday abbreviation '{token}'. Must be one of {valid_list} or '*'"
+                raise ValueError(msg)
+        return ",".join(tokens)
 
     @model_validator(mode="after")
     def validate_hour_window(self) -> Self:
@@ -192,6 +214,9 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = False
     smtp_start_tls: bool = False
     smtp_timeout: float = 30.0
+
+    admin_user: str | None = None
+    admin_password: str | None = None
 
     @classmethod
     def load(cls) -> Self:

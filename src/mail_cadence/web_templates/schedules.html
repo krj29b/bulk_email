@@ -27,8 +27,8 @@
     </div>
 
     <label for="allowed_hours_json">
-      Allowed Hours (JSON list of HourWindows e.g. [{"start": "08:00", "end": "18:00", "max_concurrency": 2, "rate_limit_per_min": 60}])
-      <textarea id="allowed_hours_json" name="allowed_hours_json" required>[{"start": "08:00", "end": "18:00", "max_concurrency": 2, "rate_limit_per_min": 60}]</textarea>
+      Allowed Hours (JSON list of HourWindows e.g. [{"start": "08:00", "end": "18:00", "days_of_week": "*", "max_concurrency": 2, "rate_limit_per_min": 60}])
+      <textarea id="allowed_hours_json" name="allowed_hours_json" required>[{"start": "08:00", "end": "18:00", "days_of_week": "*", "max_concurrency": 2, "rate_limit_per_min": 60}]</textarea>
     </label>
 
     <button type="submit">Save Schedule</button>
@@ -69,7 +69,7 @@
       <td>
         <small>
           {% for hw in sched.allowed_hours %}
-            Window: {{ hw.start }} - {{ hw.end }} (Concurrency: {{ hw.max_concurrency }}, Rate: {{ hw.rate_limit_per_min }}/min)<br>
+            Window: {{ hw.start }} - {{ hw.end }} (Days: {{ hw.days_of_week }}, Concurrency: {{ hw.max_concurrency }}, Rate: {{ hw.rate_limit_per_min }}/min)<br>
           {% endfor %}
         </small>
       </td>

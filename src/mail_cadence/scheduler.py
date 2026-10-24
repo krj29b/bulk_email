@@ -14,13 +14,23 @@ from mail_cadence.models import (
 )
 from mail_cadence.repository import DatabaseRepository
 
+WEEKDAYS: list[str] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
 __all__ = [
     "TaskScheduler",
     "TokenBucketRateLimiter",
     "get_active_window",
+    "is_day_matching",
     "is_time_in_window",
     "parse_time_str",
 ]
+
+
+def is_day_matching(days_of_week: str, day_idx: int) -> bool:
+    if days_of_week == "*":
+        return True
+    tokens = {t.strip().lower() for t in days_of_week.split(",") if t.strip()}
+    return WEEKDAYS[day_idx] in tokens
 
 
 def is_time_in_window(current_time: time, start_time: time, end_time: time) -> bool:
@@ -34,8 +44,21 @@ def is_time_in_window(current_time: time, start_time: time, end_time: time) -> b
 def get_active_window(schedule: Schedule, dt: datetime) -> HourWindow | None:
     current_time = dt.time()
     for window in schedule.allowed_hours:
-        if is_time_in_window(current_time, window.start_time, window.end_time):
-            return window
+        start_t = window.start_time
+        end_t = window.end_time
+        if start_t <= end_t:
+            if start_t <= current_time <= end_t and is_day_matching(
+                window.days_of_week, dt.weekday()
+            ):
+                return window
+        # Cross-midnight window (e.g., 22:00 to 04:00)
+        elif current_time >= start_t:
+            if is_day_matching(window.days_of_week, dt.weekday()):
+                return window
+        elif current_time <= end_t:
+            prev_day_idx = (dt - timedelta(days=1)).weekday()
+            if is_day_matching(window.days_of_week, prev_day_idx):
+                return window
     return None
 
 

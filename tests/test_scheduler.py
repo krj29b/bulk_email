@@ -426,3 +426,35 @@ def test_token_bucket_initial_tokens() -> None:
     # When initial_tokens is negative, it is clamped to 0.0
     limiter_neg = TokenBucketRateLimiter(rate_limit_per_min=60, initial_tokens=-10.0)
     assert limiter_neg.tokens == 0.0
+
+
+def test_get_active_window_days_of_week_daytime() -> None:
+    w = HourWindow(start="08:00", end="17:00", days_of_week="mon,wed,fri")
+    sched = Schedule(id="SCHED-MWF", allowed_hours=[w])
+
+    # 2026-10-19 is a Monday
+    dt_mon = datetime(2026, 10, 19, 10, 0)
+    assert dt_mon.strftime("%a").lower().startswith("mon")
+    assert get_active_window(sched, dt_mon) == w
+
+    # 2026-10-20 is a Tuesday
+    dt_tue = datetime(2026, 10, 20, 10, 0)
+    assert dt_tue.strftime("%a").lower().startswith("tue")
+    assert get_active_window(sched, dt_tue) is None
+
+
+def test_get_active_window_days_of_week_cross_midnight() -> None:
+    w = HourWindow(start="22:00", end="04:00", days_of_week="fri")
+    sched = Schedule(id="SCHED-FRI-NIGHT", allowed_hours=[w])
+
+    # Friday 2026-10-16 at 23:00 (starts today Friday)
+    dt_fri_night = datetime(2026, 10, 16, 23, 0)
+    assert get_active_window(sched, dt_fri_night) == w
+
+    # Saturday 2026-10-17 at 02:00 (spans from previous day Friday)
+    dt_sat_early = datetime(2026, 10, 17, 2, 0)
+    assert get_active_window(sched, dt_sat_early) == w
+
+    # Friday 2026-10-16 at 02:00 (spans from previous day Thursday)
+    dt_fri_early = datetime(2026, 10, 16, 2, 0)
+    assert get_active_window(sched, dt_fri_early) is None

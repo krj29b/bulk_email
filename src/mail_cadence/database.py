@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS hour_windows (
     schedule_id TEXT NOT NULL,
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL,
+    days_of_week TEXT NOT NULL DEFAULT '*',
     max_concurrency INTEGER NOT NULL DEFAULT 1,
     rate_limit_per_min INTEGER NOT NULL DEFAULT 60,
     seq INTEGER NOT NULL DEFAULT 0,
@@ -108,4 +109,8 @@ def get_connection(
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    cursor = conn.execute("PRAGMA table_info(hour_windows)")
+    cols = [row["name"] for row in cursor.fetchall()]
+    if "days_of_week" not in cols:
+        conn.execute("ALTER TABLE hour_windows ADD COLUMN days_of_week TEXT NOT NULL DEFAULT '*'")
     conn.commit()

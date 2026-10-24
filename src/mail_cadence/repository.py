@@ -38,7 +38,8 @@ class DatabaseRepository:
 
         hw_rows = self.conn.execute(
             """
-            SELECT schedule_id, start_time, end_time, max_concurrency, rate_limit_per_min
+            SELECT schedule_id, start_time, end_time, days_of_week,
+                   max_concurrency, rate_limit_per_min
             FROM hour_windows
             ORDER BY schedule_id, seq, id
             """
@@ -50,6 +51,7 @@ class DatabaseRepository:
                 HourWindow(
                     start=hw["start_time"],
                     end=hw["end_time"],
+                    days_of_week=hw["days_of_week"],
                     max_concurrency=hw["max_concurrency"],
                     rate_limit_per_min=hw["rate_limit_per_min"],
                 )
@@ -107,6 +109,7 @@ class DatabaseRepository:
                     sched.id,
                     hw.start,
                     hw.end,
+                    hw.days_of_week,
                     hw.max_concurrency,
                     hw.rate_limit_per_min,
                     seq,
@@ -117,9 +120,9 @@ class DatabaseRepository:
                 self.conn.executemany(
                     """
                     INSERT INTO hour_windows
-                    (schedule_id, start_time, end_time, max_concurrency,
+                    (schedule_id, start_time, end_time, days_of_week, max_concurrency,
                      rate_limit_per_min, seq)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     hw_data,
                 )
@@ -533,6 +536,7 @@ class DatabaseRepository:
                     schedule.id,
                     hw.start,
                     hw.end,
+                    hw.days_of_week,
                     hw.max_concurrency,
                     hw.rate_limit_per_min,
                     seq,
@@ -543,9 +547,9 @@ class DatabaseRepository:
                 self.conn.executemany(
                     """
                     INSERT INTO hour_windows
-                    (schedule_id, start_time, end_time, max_concurrency,
+                    (schedule_id, start_time, end_time, days_of_week, max_concurrency,
                      rate_limit_per_min, seq)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     hw_data,
                 )
