@@ -251,3 +251,27 @@ def test_get_task_execution_states() -> None:
     last_run_dt, last_status = updated_states["TASK-1"]
     assert last_run_dt is not None
     assert last_status == TaskExecutionStatus.SUCCESS
+
+
+def test_init_db_schema_migration_days_of_week() -> None:
+    conn = get_connection(":memory:")
+    # Manually create legacy v0.1.0 schema missing days_of_week
+    conn.executescript("""
+    CREATE TABLE schedules (id TEXT PRIMARY KEY, description TEXT);
+    CREATE TABLE hour_windows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        schedule_id TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        max_concurrency INTEGER NOT NULL DEFAULT 1,
+        rate_limit_per_min INTEGER NOT NULL DEFAULT 60,
+        seq INTEGER NOT NULL DEFAULT 0
+    );
+    """)
+    conn.commit()
+
+    # Call init_db and verify migration adds days_of_week
+    init_db(conn)
+    cursor = conn.execute("PRAGMA table_info(hour_windows)")
+    cols = [row["name"] for row in cursor.fetchall()]
+    assert "days_of_week" in cols

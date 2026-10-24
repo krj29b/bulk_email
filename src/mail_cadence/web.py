@@ -1,4 +1,6 @@
+import asyncio
 import json
+import secrets
 import sqlite3
 from collections.abc import Generator
 from contextlib import closing
@@ -8,11 +10,13 @@ from typing import Any
 import jinja2
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
+from mail_cadence.cli import run_dispatch_pipeline
 from mail_cadence.database import get_connection, init_db
-from mail_cadence.mailer import TemplateRenderer
+from mail_cadence.mailer import AsyncMailer, TemplateRenderer
 from mail_cadence.models import (
     BodyTemplate,
     ContextVar,
@@ -21,9 +25,45 @@ from mail_cadence.models import (
     Recipients,
     ReportSettings,
     Schedule,
+    Settings,
+    TaskExecutionStatus,
     WorkSchedules,
 )
 from mail_cadence.repository import DatabaseRepository
+
+security = HTTPBasic(auto_error=False)
+
+
+def verify_credentials(
+    request: Request,
+    credentials: HTTPBasicCredentials | None = Depends(security),
+) -> None:
+    settings: Settings = getattr(request.app.state, "settings", None) or Settings.load()
+    admin_user = settings.admin_user
+    admin_password = settings.admin_password
+
+    if admin_user and admin_password:
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+        user_ok = secrets.compare_digest(
+            credentials.username.encode("utf-8"),
+            admin_user.encode("utf-8"),
+        )
+        pass_ok = secrets.compare_digest(
+            credentials.password.encode("utf-8"),
+            admin_password.encode("utf-8"),
+        )
+        if not (user_ok and pass_ok):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+
 
 PACKAGE_TEMPLATES_DIR = Path(__file__).parent / "web_templates"
 templates = Jinja2Templates(directory=str(PACKAGE_TEMPLATES_DIR))
@@ -65,6 +105,7 @@ def parse_hour_windows(raw_json: str) -> list[HourWindow]:
             HourWindow(
                 start=item["start"],
                 end=item["end"],
+                days_of_week=item.get("days_of_week", "*"),
                 max_concurrency=int(item.get("max_concurrency", 1)),
                 rate_limit_per_min=int(item.get("rate_limit_per_min", 60)),
             )
@@ -380,16 +421,105 @@ def api_logs(
     )
 
 
+@router.post("/dispatch/run", response_class=HTMLResponse)
+async def trigger_dispatch_run(
+    request: Request,
+) -> Response:
+    lock: asyncio.Lock = request.app.state.dispatch_lock
+    if lock.locked():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A dispatch batch is already running.",
+        )
+
+    form = await request.form()
+    dry_run_raw = form.get("dry_run", request.query_params.get("dry_run", "false"))
+    dry_run = str(dry_run_raw).lower() in ("true", "1", "on", "yes")
+
+    async with lock:
+        db_path = getattr(request.app.state, "db_path", "mail_cadence.db")
+        await run_dispatch_pipeline(db_path=db_path, dry_run=dry_run)
+
+        with closing(get_connection(db_path)) as conn:
+            repo = DatabaseRepository(conn)
+            stats = repo.get_dashboard_stats()
+            logs = repo.get_recent_execution_logs(limit=50)
+
+        return templates.TemplateResponse(
+            request=request,
+            name="dashboard.html",
+            context={
+                "active_page": "dashboard",
+                "stats": stats,
+                "logs": logs,
+                "message": f"Manual dispatch completed (dry_run={dry_run}).",
+            },
+        )
+
+
+@router.post("/tasks/{task_id}/run", response_class=HTMLResponse)
+async def run_single_task(
+    task_id: str,
+    request: Request,
+    repo: DatabaseRepository = Depends(get_repo),
+) -> Response:
+    lock: asyncio.Lock = request.app.state.dispatch_lock
+    if lock.locked():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A dispatch batch is already running.",
+        )
+
+    task = repo.get_mail_task(task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task '{task_id}' not found",
+        )
+
+    async with lock:
+        settings = getattr(request.app.state, "settings", None) or Settings.load()
+        template_dir = getattr(request.app.state, "template_dir", ".")
+        renderer = TemplateRenderer(template_dir=template_dir)
+        mailer = AsyncMailer(settings=settings, renderer=renderer)
+
+        async with mailer:
+            res = await mailer.dispatch_task(task)
+
+        repo.log_task_execution(res)
+
+        badge_class = (
+            "badge-success"
+            if res.status == TaskExecutionStatus.SUCCESS
+            else "badge-failed"
+            if res.status == TaskExecutionStatus.FAILED
+            else "badge-partial"
+        )
+
+        content = (
+            f'<div class="alert-success">'
+            f"Task '<strong>{task_id}</strong>' executed: "
+            f'<span class="{badge_class}">{res.status.value}</span> '
+            f"(Sent: {res.sent_count})"
+            f"</div>"
+        )
+        return HTMLResponse(content=content)
+
+
 def create_app(
     db_path: str | Path = "mail_cadence.db",
     template_dir: str | Path = ".",
+    settings: Settings | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="MailCadence Admin Panel",
         description="Lightweight web administration and observability panel",
-        version="0.1.0",
+        version="0.2.0",
+        dependencies=[Depends(verify_credentials)],
     )
     app.state.db_path = str(db_path)
     app.state.template_dir = str(template_dir)
+    app.state.settings = settings or Settings.load()
+    app.state.dispatch_lock = asyncio.Lock()
     app.include_router(router)
     return app

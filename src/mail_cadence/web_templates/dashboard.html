@@ -2,6 +2,24 @@
 {% block title %}Dashboard - MailCadence Admin{% endblock %}
 {% block content %}
 <h2>Dashboard & Observability</h2>
+
+{% if message %}
+<div class="alert-success">{{ message }}</div>
+{% endif %}
+{% if error %}
+<div class="alert-error">{{ error }}</div>
+{% endif %}
+
+<div style="margin-bottom: 1.5rem;">
+  <form hx-post="/dispatch/run" hx-target="body" hx-swap="outerHTML" hx-indicator="#dispatch-spinner" style="display: flex; align-items: center; gap: 1rem;">
+    <label style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+      <input type="checkbox" name="dry_run" value="true"> Dry Run
+    </label>
+    <button type="submit" style="width: auto; margin-bottom: 0;">Run Dispatch Now</button>
+    <span id="dispatch-spinner" class="htmx-indicator" style="display: none;">Running dispatch...</span>
+  </form>
+</div>
+
 <div class="grid-stats">
   <div class="stat-card">
     <h3>{{ stats.total_tasks }}</h3>

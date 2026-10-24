@@ -166,3 +166,20 @@ def test_smtp_header_injection_validation() -> None:
 
     with pytest.raises(ValidationError):
         ReportSettings(recipient="admin@example.com\nSubject: Hacked")
+
+
+def test_hour_window_days_of_week_validation() -> None:
+    hw1 = HourWindow(start="08:00", end="17:00", days_of_week="mon,wed,fri")
+    assert hw1.days_of_week == "mon,wed,fri"
+
+    hw2 = HourWindow(start="08:00", end="17:00", days_of_week="*")
+    assert hw2.days_of_week == "*"
+
+    hw_norm = HourWindow(start="08:00", end="17:00", days_of_week=" MON , wed ")
+    assert hw_norm.days_of_week == "mon,wed"
+
+    with pytest.raises(ValidationError):
+        HourWindow(start="08:00", end="17:00", days_of_week="monday,invalid")
+
+    with pytest.raises(ValidationError):
+        HourWindow(start="08:00", end="17:00", days_of_week="")

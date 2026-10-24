@@ -124,6 +124,11 @@
         </small>
       </td>
       <td>
+        <button hx-post="/tasks/{{ task.id }}/run"
+                hx-target="#messages"
+                hx-swap="innerHTML"
+                class="outline"
+                style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Run</button>
         <a href="/tasks/{{ task.id }}/preview" target="_blank" role="button" class="outline secondary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Preview</a>
         <button hx-delete="/tasks/{{ task.id }}"
                 hx-target="#task-row-{{ task.id }}"
