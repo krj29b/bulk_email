@@ -4,23 +4,51 @@ Production-grade, asynchronous bulk email dispatch and reporting engine built in
 
 ## Overview
 
-`bulk-mailer` uses SQLite as its primary database backend for runtime configurations and execution history logging, while retaining XML support for importing and exporting `tasks.xml` and `schedules.xml`. It evaluates active schedule windows across timezones, concurrently dispatches scheduled email tasks with rate limiting and exponential backoff retry resilience, and sends a final Task Completion Status Report email upon completion.
+`bulk-mailer` is a high-performance email dispatch engine that utilizes SQLite as its primary database backend for runtime configurations and execution history logging, while retaining full XML support for importing and exporting configuration definitions (`tasks.xml` and `schedules.xml`). It evaluates active schedule windows across timezones, dispatches scheduled email tasks concurrently with rate limiting and exponential backoff retry resilience, and sends a final Task Completion Status Report email upon completion.
 
-## Features
-- **Python 3.12+ Standards:** Strict type safety, `asyncio.TaskGroup`, `StrEnum`, `pydantic v2`, and `pydantic-xml`.
-- **SQLite Persistence & Runtime DB:** Centralized database storage for schedules, tasks, report settings, and execution history logs.
-- **Safe XML Import & Export:** `defusedxml` and `pydantic-xml` integration to import XML configuration into SQLite or export SQLite configurations back to XML files.
-- **Timezone-Aware Throttling:** `zoneinfo` hourly schedule windows with `TokenBucketRateLimiter` and `asyncio.Semaphore` concurrency controls.
-- **Async SMTP Dispatch & Retries:** `aiosmtplib` with exponential backoff on transient errors and `--dry-run` simulation mode.
-- **Jinja2 Templating:** Templated task emails and consolidated HTML/plain-text summary status report emails.
+---
 
-## Configuration
+## Key Features
 
-`bulk-mailer` is configured through environment variables (or a `.env` file) for SMTP server options and XML configuration files for task definitions and execution schedules.
+- **Python 3.12+ Standards:** Built with strict type safety, `asyncio.TaskGroup`, `StrEnum`, `pydantic v2`, and `pydantic-xml`.
+- **SQLite State Persistence:** SQLite runtime database storing tasks, schedules, report settings, and detailed execution logs with Write-Ahead Logging (`WAL`) mode and busy timeout handling (`30,000 ms`).
+- **Safe XML Import & Export:** Built-in `defusedxml` protection against XXE and entity expansion attacks, supporting bidirectional conversion between XML documents and SQLite data models.
+- **Timezone-Aware Throttling & Idempotency:** Hourly schedule windows with `zoneinfo` time zone awareness, midnight-spanning time calculation, window-level idempotency protection (`last_status == SUCCESS`), and token bucket rate limiting.
+- **Async SMTP Dispatch & Retries:** High-concurrency SMTP dispatch with `aiosmtplib`, `asyncio.Semaphore`, connection pooling, exponential backoff retries on transient errors, and `--dry-run` simulation mode.
+- **Jinja2 Templating:** Templated task emails with path traversal defense and auto-escaped context variables, alongside consolidated HTML/plain-text batch summary reports.
 
-### Environment & SMTP Settings
+---
 
-Environment variables can be set directly or placed in a `.env` file in the project root:
+## Prerequisites & Installation
+
+### Requirements
+- **Python >= 3.12**
+- **pip** package manager
+
+### Installation Instructions
+
+Clone the repository and install `bulk-mailer` along with its development dependencies:
+
+```bash
+# Install in editable mode with development dependencies
+python3 -m pip install -e ".[dev]"
+```
+
+Or use the provided `Makefile`:
+
+```bash
+make install
+```
+
+---
+
+## Configuration Reference
+
+`bulk-mailer` is configured through environment variables (or a `.env` file) for SMTP server options and database location, alongside XML or database settings.
+
+### Environment Variables (`Settings`)
+
+Supported environment settings defined in `bulk_mailer.models.Settings`:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -28,141 +56,121 @@ Environment variables can be set directly or placed in a `.env` file in the proj
 | `SMTP_PORT` | `1025` | Port number for the SMTP server |
 | `SMTP_USER` | *None* | Username for SMTP authentication (optional) |
 | `SMTP_PASSWORD` | *None* | Password for SMTP authentication (optional) |
-| `SMTP_USE_TLS` | `false` | Enable TLS connection (`true`/`false`) |
-| `SMTP_START_TLS` | `false` | Enable STARTTLS (`true`/`false`) |
+| `SMTP_USE_TLS` | `false` | Enable direct TLS connection (`true`/`false`) |
+| `SMTP_START_TLS` | `false` | Enable STARTTLS command upgrade (`true`/`false`) |
 | `SMTP_TIMEOUT` | `30.0` | Timeout in seconds for SMTP operations |
 | `BULK_MAILER_DB` | `bulk_mailer.db` | Path to SQLite database file |
 
-### Tasks Configuration (`tasks.xml`)
+---
 
-The tasks configuration XML file defines email dispatch tasks, template references, context variables, and global report settings.
+## CLI Usage Guide (`bulk-mailer`)
 
-#### Structure & Example
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<MailConfiguration>
-  <ReportSettings>
-    <Recipient>ops-alerts@example.com</Recipient>
-    <Sender>mailer-daemon@example.com</Sender>
-    <SubjectPrefix>[BulkMailer Status Report]</SubjectPrefix>
-    <IncludeFullErrorTrace>true</IncludeFullErrorTrace>
-  </ReportSettings>
-  <Tasks>
-    <MailTask id="TASK-001" max_retries="3" priority="high" schedule_ref="SCHED-MORNING">
-      <Sender>noreply@example.com</Sender>
-      <Recipients>
-        <To>client.alpha@example.com</To>
-        <To>client.beta@example.com</To>
-        <Cc>account.manager@example.com</Cc>
-      </Recipients>
-      <Subject>Daily Operational Dispatch - EMEA</Subject>
-      <BodyTemplate format="html">templates/daily_dispatch.html.j2</BodyTemplate>
-      <ContextVariables>
-        <Var name="region">EMEA</Var>
-        <Var name="report_date">2026-10-17</Var>
-      </ContextVariables>
-    </MailTask>
-  </Tasks>
-</MailConfiguration>
-```
+The package provides the `bulk-mailer` CLI executable (as well as `python -m bulk_mailer.cli`).
 
-#### Key Elements
-- **`<ReportSettings>`**: Defines configuration for the final summary status report.
-  - `Recipient`: Email address receiving the report (required).
-  - `Sender`: Sender email address for the report email (optional).
-  - `SubjectPrefix`: Prefix added to the status report email subject (default: `[BulkMailer Report]`).
-  - `IncludeFullErrorTrace`: Boolean flag (`true`/`false`) indicating whether full error details are included in the report.
-- **`<MailTask>`**: Defines an individual email dispatch task.
-  - Attributes: `id` (unique task identifier), `max_retries` (number of retry attempts on transient failure, default: `3`), `priority` (`high`/`normal`/`low`), `schedule_ref` (references a `Schedule` ID in `schedules.xml`).
-  - `Sender`: Sender email address for this task.
-  - `Recipients`: Contains lists of `<To>`, `<Cc>`, and `<Bcc>` recipient email addresses.
-  - `Subject`: Subject line template for the email.
-  - `BodyTemplate`: Jinja2 template filepath and `format` attribute (`html` or `text`).
-  - `ContextVariables`: Key-value variables (`<Var name="...">value</Var>`) rendered within the email template.
+### 1. Main Dispatch Command
 
-### Work Schedules Configuration (`schedules.xml`)
+Executes the main bulk mailer dispatch pipeline.
 
-The work schedules XML file defines schedule windows, timezones, rate limits, and concurrency limits.
-
-#### Structure & Example
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<WorkSchedules timezone="Europe/Warsaw">
-  <Schedule id="SCHED-MORNING" description="Morning operational window">
-    <AllowedHours>
-      <HourWindow start="06:00" end="12:00" max_concurrency="5" rate_limit_per_min="60"/>
-    </AllowedHours>
-  </Schedule>
-</WorkSchedules>
-```
-
-#### Key Elements
-- **`<WorkSchedules>`**: Root element with a `timezone` attribute (IANA timezone string, e.g., `Europe/Warsaw`, `UTC`).
-- **`<Schedule>`**: Schedule rule group referenced by `schedule_ref` in tasks. Contains an `id` and optional `description`.
-- **`<HourWindow>`**: Defines time execution window and throttling controls:
-  - `start` / `end`: Local time window bounds in `HH:MM` or `HH:MM:SS` format.
-  - `max_concurrency`: Maximum simultaneous emails sent concurrently within this window (default: `1`).
-  - `rate_limit_per_min`: Maximum emails sent per minute (token bucket rate limiter, default: `60`).
-
-### CLI Options and Commands
-
-You can configure execution options and manage configurations when running the CLI tool:
-
-#### Global Options
-| Option | Short | Description |
-| --- | --- | --- |
-| `--db` | `-b` | Path to SQLite database file (default: `bulk_mailer.db` or `BULK_MAILER_DB`) |
-| `--tasks-xml` | `-t` | Optional path to tasks configuration XML file to seed/upsert database |
-| `--schedule-xml` | `-s` | Optional path to schedules configuration XML file to seed/upsert database |
-| `--dry-run` | `-d` | Execute workflow without sending real network SMTP requests |
-| `--verbose` | `-v` | Enable verbose debug logging |
-
-#### Management Commands
-
-- **`import-xml`**: Import tasks and schedule XML files into the SQLite database.
-  - `--tasks-xml` / `-t`: Path to tasks XML file.
-  - `--schedule-xml` / `-s`: Path to schedule XML file.
-  - `--db` / `-b`: Path to SQLite database file.
-  - `--mode` / `-m`: Import mode (`upsert` or `replace`, default: `upsert`).
-- **`export-xml`**: Export tasks and schedule configurations from SQLite database to XML files.
-  - `--tasks-xml` / `-t`: Target path for tasks XML output.
-  - `--schedule-xml` / `-s`: Target path for schedules XML output.
-  - `--db` / `-b`: Path to SQLite database file.
-
-## Usage
-
-### Installation
 ```bash
-make install
+bulk-mailer [OPTIONS]
 ```
 
-### Importing XML Configuration into SQLite
+#### Flags & Options
+| Option | Short | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--tasks-xml` | `-t` | `PATH` | *None* | Optional path to tasks XML file to seed/upsert database |
+| `--schedule-xml` | `-s` | `PATH` | *None* | Optional path to schedule XML file to seed/upsert database |
+| `--db` | `-b` | `PATH` | `bulk_mailer.db` | Path to SQLite database file (overrides `BULK_MAILER_DB`) |
+| `--dry-run` | `-d` | `FLAG` | `false` | Execute workflow in simulation mode without sending network SMTP requests |
+| `--verbose` | `-v` | `FLAG` | `false` | Enable verbose debug logging output |
+
+#### Exit Codes
+- **`0`**: Successful execution or no tasks were eligible for processing.
+- **`1`**: Configuration or database error encountered (e.g. invalid file format, database connection failure).
+- **`2`**: One or more tasks failed execution during the dispatch batch.
+
+#### Example Dispatch Commands
 ```bash
-bulk-mailer import-xml --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml --db bulk_mailer.db
+# Execute dispatch and seed XML configurations if database is empty or needs updates
+bulk-mailer --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml
+
+# Run dispatch in dry-run mode using an existing SQLite database
+bulk-mailer --db bulk_mailer.db --dry-run --verbose
 ```
 
-### Dry Run Execution
+---
+
+### 2. XML Import Command (`import-xml`)
+
+Imports task definitions and schedule rules from XML configuration files into the SQLite database.
+
 ```bash
-make run-dry
+bulk-mailer import-xml [OPTIONS]
 ```
 
-Or run directly via CLI:
+#### Options
+| Option | Short | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--tasks-xml` | `-t` | `PATH` | *None* | Path to tasks configuration XML file |
+| `--schedule-xml` | `-s` | `PATH` | *None* | Path to schedule configuration XML file |
+| `--db` | `-b` | `PATH` | `bulk_mailer.db` | Target SQLite database file path |
+| `--mode` | `-m` | `CHOICE` | `upsert` | Import mode: `upsert` (update/insert) or `replace` (clear and reload) |
+
+#### Example
 ```bash
-bulk-mailer --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml --dry-run
+bulk-mailer import-xml --tasks-xml config/samples/tasks.xml --schedule-xml config/samples/schedules.xml --mode upsert
 ```
 
-If the database is already seeded, you can run dispatch without specifying XML files:
+---
+
+### 3. XML Export Command (`export-xml`)
+
+Exports current task definitions, schedules, and report settings from the SQLite database back into XML files.
+
 ```bash
-bulk-mailer --db bulk_mailer.db --dry-run
+bulk-mailer export-xml [OPTIONS]
 ```
 
-### Exporting SQLite Database Configuration to XML
+#### Options
+| Option | Short | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--tasks-xml` | `-t` | `PATH` | *None* | Destination path for exported tasks XML |
+| `--schedule-xml` | `-s` | `PATH` | *None* | Destination path for exported schedules XML |
+| `--db` | `-b` | `PATH` | `bulk_mailer.db` | Source SQLite database file path |
+
+#### Example
 ```bash
-bulk-mailer export-xml --tasks-xml exported_tasks.xml --schedule-xml exported_schedules.xml --db bulk_mailer.db
+bulk-mailer export-xml --tasks-xml exported_tasks.xml --schedule-xml exported_schedules.xml
 ```
 
-### Running Tests and Quality Gates
+---
+
+## Development & Quality Gates
+
+The project maintains strict code quality standards enforced via `Makefile` commands:
+
 ```bash
+# Run unit and integration test suite with coverage
 make test
+
+# Run code style and linting checks (Ruff & Mypy)
+make lint
+
+# Run dead code detection (Vulture)
+make dead-code
+
+# Run code complexity analysis (Radon)
+make complexity
+
+# Run dependency vulnerability audit (pip-audit)
+make audit
+
+# Run all quality gate checks in sequence
 make quality-gate
 ```
+
+---
+
+## Architectural Deep Dive
+
+For detailed technical specifications, database entity-relationship diagrams (ERD), scheduling algorithms, Mermaid state/sequence diagrams, and security mechanics, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
