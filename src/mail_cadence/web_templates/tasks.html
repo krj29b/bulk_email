@@ -1,146 +1,225 @@
 {% extends "layout.html" %}
 {% block title %}Tasks - MailCadence Admin{% endblock %}
 {% block content %}
-<h2>Mail Tasks</h2>
+<!-- Page Header -->
+<div class="flex items-center justify-between pb-2 border-b border-slate-800">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+      <i data-lucide="mail" class="w-6 h-6 text-indigo-400"></i>
+      Mail Tasks
+    </h1>
+    <p class="text-xs text-slate-400 mt-1">Configure automated task definitions, recipient lists, and Jinja2 templates.</p>
+  </div>
+</div>
 
 {% if message %}
-<div class="alert-success">{{ message }}</div>
+<div class="alert-success flex items-center gap-2">
+  <i data-lucide="check-circle" class="w-4 h-4 shrink-0"></i>
+  <span>{{ message }}</span>
+</div>
 {% endif %}
 {% if error %}
-<div class="alert-error">{{ error }}</div>
+<div class="alert-error flex items-center gap-2">
+  <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+  <span>{{ error }}</span>
+</div>
 {% endif %}
 
 <div id="messages"></div>
 
-<details>
-  <summary role="button" class="contrast">Create / Update Task</summary>
-  <form action="/tasks" method="POST" style="margin-top: 1rem;">
-    <div class="grid">
-      <label for="id">
-        Task ID *
-        <input type="text" id="id" name="id" required placeholder="e.g. daily_newsletter">
-      </label>
-      <label for="schedule_ref">
-        Schedule Ref *
-        <select id="schedule_ref" name="schedule_ref" required>
-          {% for sched in schedules %}
-            <option value="{{ sched.id }}">{{ sched.id }} - {{ sched.description or '' }}</option>
-          {% endfor %}
-        </select>
-      </label>
+<!-- Create / Update Task Form Card -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+  <details class="group">
+    <summary class="flex items-center justify-between p-4 cursor-pointer select-none bg-slate-900/80 hover:bg-slate-800/50 transition-colors">
+      <div class="flex items-center gap-2">
+        <i data-lucide="plus-circle" class="w-4 h-4 text-indigo-400"></i>
+        <span class="text-sm font-semibold text-white">Create / Update Task</span>
+      </div>
+      <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform"></i>
+    </summary>
+
+    <div class="p-6 border-t border-slate-800 bg-slate-950/40">
+      <form action="/tasks" method="POST" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="id" class="block text-xs font-medium text-slate-300 mb-1">Task ID *</label>
+            <input type="text" id="id" name="id" required placeholder="e.g. daily_newsletter"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+          </div>
+          <div>
+            <label for="schedule_ref" class="block text-xs font-medium text-slate-300 mb-1">Schedule Ref *</label>
+            <select id="schedule_ref" name="schedule_ref" required
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+              {% for sched in schedules %}
+                <option value="{{ sched.id }}">{{ sched.id }} - {{ sched.description or '' }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="sender" class="block text-xs font-medium text-slate-300 mb-1">Sender Email *</label>
+            <input type="text" id="sender" name="sender" required placeholder="sender@example.com"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+          </div>
+          <div>
+            <label for="priority" class="block text-xs font-medium text-slate-300 mb-1">Priority</label>
+            <select id="priority" name="priority"
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+              <option value="high">High</option>
+              <option value="normal" selected>Normal</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label for="max_retries" class="block text-xs font-medium text-slate-300 mb-1">Max Retries</label>
+            <input type="number" id="max_retries" name="max_retries" value="3" min="0"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+          </div>
+        </div>
+
+        <div>
+          <label for="subject" class="block text-xs font-medium text-slate-300 mb-1">Subject *</label>
+          <input type="text" id="subject" name="subject" required placeholder="Email Subject"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="body_format" class="block text-xs font-medium text-slate-300 mb-1">Format</label>
+            <select id="body_format" name="body_format"
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+              <option value="html" selected>HTML</option>
+              <option value="text">Text</option>
+            </select>
+          </div>
+          <div>
+            <label for="body_template_path" class="block text-xs font-medium text-slate-300 mb-1">Template Path *</label>
+            <input type="text" id="body_template_path" name="body_template_path" required placeholder="templates/newsletter.html.j2"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="to" class="block text-xs font-medium text-slate-300 mb-1">To Recipients *</label>
+            <textarea id="to" name="to" required rows="3" placeholder="user1@example.com, user2@example.com"
+                      class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"></textarea>
+          </div>
+          <div>
+            <label for="cc" class="block text-xs font-medium text-slate-300 mb-1">Cc Recipients</label>
+            <textarea id="cc" name="cc" rows="3" placeholder="cc@example.com"
+                      class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"></textarea>
+          </div>
+          <div>
+            <label for="bcc" class="block text-xs font-medium text-slate-300 mb-1">Bcc Recipients</label>
+            <textarea id="bcc" name="bcc" rows="3" placeholder="bcc@example.com"
+                      class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"></textarea>
+          </div>
+        </div>
+
+        <div>
+          <label for="context_variables" class="block text-xs font-medium text-slate-300 mb-1">Context Variables (JSON)</label>
+          <textarea id="context_variables" name="context_variables" rows="2" placeholder='[{"name": "company", "value": "Acme Corp"}]'
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"></textarea>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>Save Task</span>
+          </button>
+        </div>
+      </form>
     </div>
+  </details>
+</div>
 
-    <div class="grid">
-      <label for="sender">
-        Sender Email *
-        <input type="text" id="sender" name="sender" required placeholder="sender@example.com">
-      </label>
-      <label for="priority">
-        Priority
-        <select id="priority" name="priority">
-          <option value="high">High</option>
-          <option value="normal" selected>Normal</option>
-          <option value="low">Low</option>
-        </select>
-      </label>
-      <label for="max_retries">
-        Max Retries
-        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
-      </label>
+<!-- Existing Tasks Table Card -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+  <div class="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/80">
+    <div class="flex items-center gap-2">
+      <i data-lucide="layers" class="w-4 h-4 text-indigo-400"></i>
+      <h2 class="text-sm font-semibold text-white">Configured Tasks</h2>
     </div>
+  </div>
 
-    <label for="subject">
-      Subject *
-      <input type="text" id="subject" name="subject" required placeholder="Email Subject">
-    </label>
-
-    <div class="grid">
-      <label for="body_format">
-        Format
-        <select id="body_format" name="body_format">
-          <option value="html" selected>HTML</option>
-          <option value="text">Text</option>
-        </select>
-      </label>
-      <label for="body_template_path">
-        Template Path *
-        <input type="text" id="body_template_path" name="body_template_path" required placeholder="templates/newsletter.html.j2">
-      </label>
-    </div>
-
-    <div class="grid">
-      <label for="to">
-        To Recipients (comma/newline separated) *
-        <textarea id="to" name="to" required placeholder="user1@example.com, user2@example.com"></textarea>
-      </label>
-      <label for="cc">
-        Cc Recipients
-        <textarea id="cc" name="cc" placeholder="cc@example.com"></textarea>
-      </label>
-      <label for="bcc">
-        Bcc Recipients
-        <textarea id="bcc" name="bcc" placeholder="bcc@example.com"></textarea>
-      </label>
-    </div>
-
-    <label for="context_variables">
-      Context Variables (JSON e.g. [{"name": "user_name", "value": "John"}])
-      <textarea id="context_variables" name="context_variables" placeholder='[{"name": "company", "value": "Acme Corp"}]'></textarea>
-    </label>
-
-    <button type="submit">Save Task</button>
-  </form>
-</details>
-
-<hr>
-
-<h3>Existing Tasks</h3>
-{% if tasks %}
-<table>
-  <thead>
-    <tr>
-      <th>ID</th>
-      <th>Schedule</th>
-      <th>Sender</th>
-      <th>Subject</th>
-      <th>Template</th>
-      <th>Recipients (To/Cc/Bcc)</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for task in tasks %}
-    <tr id="task-row-{{ task.id }}">
-      <td><strong>{{ task.id }}</strong></td>
-      <td>{{ task.schedule_ref }}</td>
-      <td>{{ task.sender }}</td>
-      <td>{{ task.subject }}</td>
-      <td><small>{{ task.body_template.template_path }} ({{ task.body_template.format }})</small></td>
-      <td>
-        <small>
-          To: {{ task.recipients.to | join(', ') }}<br>
-          {% if task.recipients.cc %}Cc: {{ task.recipients.cc | join(', ') }}<br>{% endif %}
-          {% if task.recipients.bcc %}Bcc: {{ task.recipients.bcc | join(', ') }}{% endif %}
-        </small>
-      </td>
-      <td>
-        <button hx-post="/tasks/{{ task.id }}/run"
-                hx-target="#messages"
-                hx-swap="innerHTML"
-                class="outline"
-                style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Run</button>
-        <a href="/tasks/{{ task.id }}/preview" target="_blank" role="button" class="outline secondary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Preview</a>
-        <button hx-delete="/tasks/{{ task.id }}"
-                hx-target="#task-row-{{ task.id }}"
-                hx-swap="outerHTML"
-                class="outline contrast"
-                style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Delete</button>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p>No mail tasks found.</p>
-{% endif %}
+  {% if tasks %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-left text-xs divide-y divide-slate-800/70">
+      <thead class="bg-slate-950/60 text-slate-400 font-mono uppercase tracking-wider sticky top-0">
+        <tr>
+          <th class="py-3 px-4">ID</th>
+          <th class="py-3 px-4">Schedule</th>
+          <th class="py-3 px-4">Sender</th>
+          <th class="py-3 px-4">Subject</th>
+          <th class="py-3 px-4">Template</th>
+          <th class="py-3 px-4">Recipients</th>
+          <th class="py-3 px-4 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800/50 text-slate-300">
+        {% for task in tasks %}
+        <tr id="task-row-{{ task.id }}" class="hover:bg-slate-800/40 transition-colors">
+          <td class="py-3 px-4 font-mono font-medium text-white">
+            <div class="flex items-center gap-2">
+              <span>{{ task.id }}</span>
+              {% if task.priority == 'high' %}
+                <span class="bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] px-1.5 py-0.2 rounded font-mono">high</span>
+              {% elif task.priority == 'low' %}
+                <span class="bg-slate-500/10 text-slate-400 border border-slate-700 text-[10px] px-1.5 py-0.2 rounded font-mono">low</span>
+              {% else %}
+                <span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] px-1.5 py-0.2 rounded font-mono">normal</span>
+              {% endif %}
+            </div>
+          </td>
+          <td class="py-3 px-4 font-mono text-slate-400">{{ task.schedule_ref }}</td>
+          <td class="py-3 px-4 font-mono text-slate-400">{{ task.sender }}</td>
+          <td class="py-3 px-4 text-slate-200 font-medium">{{ task.subject }}</td>
+          <td class="py-3 px-4 font-mono text-slate-400">
+            <span>{{ task.body_template.template_path }}</span>
+            <span class="text-slate-500">({{ task.body_template.format }})</span>
+          </td>
+          <td class="py-3 px-4 font-mono text-slate-400">
+            <div><span class="text-slate-500">To:</span> {{ task.recipients.to | join(', ') }}</div>
+            {% if task.recipients.cc %}<div><span class="text-slate-500">Cc:</span> {{ task.recipients.cc | join(', ') }}</div>{% endif %}
+            {% if task.recipients.bcc %}<div><span class="text-slate-500">Bcc:</span> {{ task.recipients.bcc | join(', ') }}</div>{% endif %}
+          </td>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            <div class="inline-flex items-center gap-1.5">
+              <button hx-post="/tasks/{{ task.id }}/run"
+                      hx-target="#messages"
+                      hx-swap="innerHTML"
+                      class="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-slate-700 px-2 py-1 rounded text-xs transition-colors">
+                <i data-lucide="play" class="w-3 h-3"></i>
+                <span>Run</span>
+              </button>
+              <a href="/tasks/{{ task.id }}/preview" target="_blank"
+                 class="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2 py-1 rounded text-xs transition-colors">
+                <i data-lucide="eye" class="w-3 h-3"></i>
+                <span>Preview</span>
+              </a>
+              <button hx-delete="/tasks/{{ task.id }}"
+                      hx-target="#task-row-{{ task.id }}"
+                      hx-swap="outerHTML"
+                      class="inline-flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-2 py-1 rounded text-xs transition-colors">
+                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                <span>Delete</span>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+    <i data-lucide="mail" class="w-8 h-8 text-slate-600"></i>
+    <p class="text-sm font-medium">No mail tasks found.</p>
+    <p class="text-xs">Create a new task above to start dispatching emails.</p>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

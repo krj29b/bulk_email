@@ -1,38 +1,95 @@
 {% extends "layout.html" %}
 {% block title %}Report Settings - MailCadence Admin{% endblock %}
 {% block content %}
-<h2>Report Settings</h2>
+<!-- Page Header -->
+<div class="pb-2 border-b border-slate-800">
+  <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+    <i data-lucide="sliders" class="w-6 h-6 text-indigo-400"></i>
+    Report Settings
+  </h1>
+  <p class="text-xs text-slate-400 mt-1">Configure automated dispatch summary reports, sender metadata, and error tracing.</p>
+</div>
 
 {% if message %}
-<div class="alert-success">{{ message }}</div>
+<div class="alert-success flex items-center gap-2">
+  <i data-lucide="check-circle" class="w-4 h-4 shrink-0"></i>
+  <span>{{ message }}</span>
+</div>
 {% endif %}
 {% if error %}
-<div class="alert-error">{{ error }}</div>
+<div class="alert-error flex items-center gap-2">
+  <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+  <span>{{ error }}</span>
+</div>
 {% endif %}
 
-<form action="/settings" method="POST" style="max-width: 600px;">
-  <label for="recipient">
-    Recipient Email *
-    <input type="text" id="recipient" name="recipient" value="{{ settings.recipient }}" required>
-  </label>
+<!-- Settings Split Panel Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Left Column: Guidance & Description -->
+  <div class="space-y-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+      <div class="flex items-center gap-2 text-indigo-400">
+        <i data-lucide="file-text" class="w-4 h-4"></i>
+        <h2 class="text-sm font-semibold text-white">Summary Reports</h2>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        After every batch execution, MailCadence generates a detailed summary report detailing successful dispatches, failures, and latency metrics.
+      </p>
+      <div class="pt-2 border-t border-slate-800/80 text-[11px] text-slate-500 space-y-1">
+        <p class="flex items-center gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Strict validation enabled</p>
+        <p class="flex items-center gap-1.5"><i data-lucide="lock" class="w-3.5 h-3.5 text-indigo-400"></i> SMTP Header injection protected</p>
+      </div>
+    </div>
+  </div>
 
-  <label for="sender">
-    Sender Email (Optional)
-    <input type="text" id="sender" name="sender" value="{{ settings.sender or '' }}">
-  </label>
+  <!-- Right Column: Settings Form Controls -->
+  <div class="lg:col-span-2">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+      <form action="/settings" method="POST" class="space-y-5">
+        <div>
+          <label for="recipient" class="block text-xs font-medium text-slate-300 mb-1">Recipient Email *</label>
+          <input type="text" id="recipient" name="recipient" value="{{ settings.recipient }}" required
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+          <p class="text-[11px] text-slate-500 mt-1">Address that receives execution summary reports.</p>
+        </div>
 
-  <label for="subject_prefix">
-    Subject Prefix
-    <input type="text" id="subject_prefix" name="subject_prefix" value="{{ settings.subject_prefix }}" required>
-  </label>
+        <div>
+          <label for="sender" class="block text-xs font-medium text-slate-300 mb-1">Sender Email (Optional)</label>
+          <input type="text" id="sender" name="sender" value="{{ settings.sender or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+          <p class="text-[11px] text-slate-500 mt-1">Custom From address for report emails. Defaults to global SMTP user if empty.</p>
+        </div>
 
-  <fieldset>
-    <label for="include_full_error_trace">
-      <input type="checkbox" id="include_full_error_trace" name="include_full_error_trace" value="true" {% if settings.include_full_error_trace %}checked{% endif %}>
-      Include full error traces in summary reports
-    </label>
-  </fieldset>
+        <div>
+          <label for="subject_prefix" class="block text-xs font-medium text-slate-300 mb-1">Subject Prefix *</label>
+          <input type="text" id="subject_prefix" name="subject_prefix" value="{{ settings.subject_prefix }}" required
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
 
-  <button type="submit">Save Report Settings</button>
-</form>
+        <div class="p-4 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-3">
+          <div class="flex items-start gap-3">
+            <div class="flex items-center h-5">
+              <input type="checkbox" id="include_full_error_trace" name="include_full_error_trace" value="true"
+                     {% if settings.include_full_error_trace %}checked{% endif %}
+                     class="w-4 h-4 rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900">
+            </div>
+            <div>
+              <label for="include_full_error_trace" class="text-xs font-medium text-slate-200 cursor-pointer">
+                Include full error traces in summary reports
+              </label>
+              <p class="text-[11px] text-slate-500 mt-0.5">Appends stack traces and detailed SMTP response codes for failed recipient attempts.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 flex items-center justify-end">
+          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>Save Report Settings</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
