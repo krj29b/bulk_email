@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+{% block title %}Dashboard - BulkMailer Admin{% endblock %}
+{% block content %}
+<h2>Dashboard & Observability</h2>
+<div class="grid-stats">
+  <div class="stat-card">
+    <h3>{{ stats.total_tasks }}</h3>
+    <p>Total Tasks</p>
+  </div>
+  <div class="stat-card">
+    <h3>{{ stats.total_schedules }}</h3>
+    <p>Total Schedules</p>
+  </div>
+  <div class="stat-card">
+    <h3>{{ stats.total_executions }}</h3>
+    <p>Total Executions</p>
+  </div>
+  <div class="stat-card">
+    <h3>{{ stats.total_emails_sent }}</h3>
+    <p>Emails Sent</p>
+  </div>
+  <div class="stat-card">
+    <h3>{{ stats.success_count }}</h3>
+    <p>Successful Runs</p>
+  </div>
+  <div class="stat-card">
+    <h3>{{ stats.failed_count }}</h3>
+    <p>Failed Runs</p>
+  </div>
+  <div class="stat-card">
+    <h3>{{ stats.avg_duration_ms }} ms</h3>
+    <p>Avg Duration</p>
+  </div>
+</div>
+
+<h3>Recent Execution Logs</h3>
+{% if logs %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Task ID</th>
+      <th>Batch ID</th>
+      <th>Status</th>
+      <th>Sent Count</th>
+      <th>Duration (ms)</th>
+      <th>Attempts</th>
+      <th>Executed At</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for log in logs %}
+    <tr>
+      <td>{{ log.id }}</td>
+      <td><strong>{{ log.task_id }}</strong></td>
+      <td><small>{{ log.batch_id or "-" }}</small></td>
+      <td>
+        {% if log.status == 'SUCCESS' %}
+          <span class="badge-success">SUCCESS</span>
+        {% elif log.status == 'FAILED' %}
+          <span class="badge-failed">FAILED</span>
+        {% elif log.status == 'PARTIAL' %}
+          <span class="badge-partial">PARTIAL</span>
+        {% else %}
+          <span class="badge-skipped">{{ log.status }}</span>
+        {% endif %}
+      </td>
+      <td>{{ log.sent_count }}</td>
+      <td>{{ log.duration_ms }}</td>
+      <td>{{ log.attempt_count }}</td>
+      <td><small>{{ log.executed_at }}</small></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No execution logs available yet.</p>
+{% endif %}
+{% endblock %}

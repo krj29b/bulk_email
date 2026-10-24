@@ -88,14 +88,16 @@ CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status);
 """
 
 
-def get_connection(db_path: str | Path = ":memory:") -> sqlite3.Connection:
+def get_connection(
+    db_path: str | Path = ":memory:", check_same_thread: bool = False
+) -> sqlite3.Connection:
     path_str = str(db_path)
     if path_str != ":memory:":
         parent = Path(path_str).parent
         if parent and not parent.exists():
             parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(path_str, timeout=30.0)
+    conn = sqlite3.connect(path_str, timeout=30.0, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA busy_timeout = 30000;")
