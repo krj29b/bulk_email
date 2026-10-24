@@ -3,7 +3,7 @@
   <ReportSettings>
     <Recipient>ops-alerts@example.com</Recipient>
     <Sender>mailer-daemon@example.com</Sender>
-    <SubjectPrefix>[BulkMailer Status Report]</SubjectPrefix>
+    <SubjectPrefix>[MailCadence Status Report]</SubjectPrefix>
     <IncludeFullErrorTrace>true</IncludeFullErrorTrace>
   </ReportSettings>
   <Tasks>

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 import aiosmtplib
 import pytest
 
-from bulk_mailer.mailer import AsyncMailer, TemplateRenderer
-from bulk_mailer.models import (
+from mail_cadence.mailer import AsyncMailer, TemplateRenderer
+from mail_cadence.models import (
     BodyTemplate,
     ContextVar,
     MailTask,
@@ -15,8 +15,8 @@ from bulk_mailer.models import (
     Settings,
     TaskExecutionStatus,
 )
-from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
-from bulk_mailer.xml_loader import XMLValidationError, load_mail_configuration, load_work_schedules
+from mail_cadence.reporter import ReportGenerator, aggregate_summary_report
+from mail_cadence.xml_loader import XMLValidationError, load_mail_configuration, load_work_schedules
 
 
 def test_mail_task_get_context_dict() -> None:
@@ -146,8 +146,8 @@ def test_reporter_fallback(tmp_path: Path) -> None:
     report = aggregate_summary_report([], datetime.now(UTC), datetime.now(UTC))
     report_settings = ReportSettings(recipient="r@example.com")
     html_c, txt_c = gen.render_report(report, report_settings)
-    assert "BulkMailer Report" in html_c
-    assert "BulkMailer Report" in txt_c
+    assert "MailCadence Report" in html_c
+    assert "MailCadence Report" in txt_c
 
 
 @pytest.mark.asyncio

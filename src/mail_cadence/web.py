@@ -11,9 +11,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
-from bulk_mailer.database import get_connection, init_db
-from bulk_mailer.mailer import TemplateRenderer
-from bulk_mailer.models import (
+from mail_cadence.database import get_connection, init_db
+from mail_cadence.mailer import TemplateRenderer
+from mail_cadence.models import (
     BodyTemplate,
     ContextVar,
     HourWindow,
@@ -23,7 +23,7 @@ from bulk_mailer.models import (
     Schedule,
     WorkSchedules,
 )
-from bulk_mailer.repository import DatabaseRepository
+from mail_cadence.repository import DatabaseRepository
 
 PACKAGE_TEMPLATES_DIR = Path(__file__).parent / "web_templates"
 templates = Jinja2Templates(directory=str(PACKAGE_TEMPLATES_DIR))
@@ -31,7 +31,7 @@ router = APIRouter()
 
 
 def get_repo(request: Request) -> Generator[DatabaseRepository, None, None]:
-    db_path = getattr(request.app.state, "db_path", "bulk_mailer.db")
+    db_path = getattr(request.app.state, "db_path", "mail_cadence.db")
     with closing(get_connection(db_path)) as conn:
         init_db(conn)
         yield DatabaseRepository(conn)
@@ -330,7 +330,7 @@ async def save_settings(
     recipient = str(form.get("recipient", ""))
     sender_raw = form.get("sender")
     sender = str(sender_raw) if sender_raw and str(sender_raw).strip() else None
-    subject_prefix = str(form.get("subject_prefix", "[BulkMailer Report]"))
+    subject_prefix = str(form.get("subject_prefix", "[MailCadence Report]"))
     include_full_error_trace = form.get("include_full_error_trace") in ("true", "1", "on", True)
 
     try:
@@ -381,11 +381,11 @@ def api_logs(
 
 
 def create_app(
-    db_path: str | Path = "bulk_mailer.db",
+    db_path: str | Path = "mail_cadence.db",
     template_dir: str | Path = ".",
 ) -> FastAPI:
     app = FastAPI(
-        title="BulkMailer Admin Panel",
+        title="MailCadence Admin Panel",
         description="Lightweight web administration and observability panel",
         version="0.1.0",
     )

@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from bulk_mailer.mailer import AsyncMailer
-from bulk_mailer.models import (
+from mail_cadence.mailer import AsyncMailer
+from mail_cadence.models import (
     BatchSummaryReport,
     ReportSettings,
     TaskExecutionResult,
@@ -81,11 +81,11 @@ class ReportGenerator:
         }
 
         html_fallback = (
-            f"<h2>BulkMailer Report</h2><p>Tasks total: {report.total_tasks}, "
+            f"<h2>MailCadence Report</h2><p>Tasks total: {report.total_tasks}, "
             f"Success: {report.successful_tasks}, Failed: {report.failed_tasks}</p>"
         )
         txt_fallback = (
-            f"BulkMailer Report\nTasks total: {report.total_tasks}, "
+            f"MailCadence Report\nTasks total: {report.total_tasks}, "
             f"Success: {report.successful_tasks}, Failed: {report.failed_tasks}"
         )
 
@@ -104,7 +104,7 @@ class ReportGenerator:
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"{report_settings.subject_prefix} Task Execution Summary"
-        msg["From"] = report_settings.sender or "bulk-mailer-daemon@localhost"
+        msg["From"] = report_settings.sender or "mail-cadence-daemon@localhost"
         msg["To"] = report_settings.recipient
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid()
@@ -114,7 +114,7 @@ class ReportGenerator:
 
         success, err, _ = await mailer.send_single_message(
             msg=msg,
-            sender=report_settings.sender or "bulk-mailer-daemon@localhost",
+            sender=report_settings.sender or "mail-cadence-daemon@localhost",
             recipients=[report_settings.recipient],
         )
 

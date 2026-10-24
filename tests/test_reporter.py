@@ -3,14 +3,14 @@ from typing import Any
 
 import pytest
 
-from bulk_mailer.mailer import AsyncMailer
-from bulk_mailer.models import (
+from mail_cadence.mailer import AsyncMailer
+from mail_cadence.models import (
     ReportSettings,
     Settings,
     TaskExecutionResult,
     TaskExecutionStatus,
 )
-from bulk_mailer.reporter import ReportGenerator, aggregate_summary_report
+from mail_cadence.reporter import ReportGenerator, aggregate_summary_report
 
 
 def test_aggregate_summary_report() -> None:
@@ -73,8 +73,8 @@ def test_render_report_success() -> None:
     gen = ReportGenerator(template_dir="templates")
     html_content, txt_content = gen.render_report(report, report_settings)
 
-    assert "BulkMailer Task Completion Status Report" in html_content
-    assert "BulkMailer Task Completion Status Report" in txt_content
+    assert "MailCadence Task Completion Status Report" in html_content
+    assert "MailCadence Task Completion Status Report" in txt_content
 
 
 def test_render_report_fallback(caplog: pytest.LogCaptureFixture) -> None:
@@ -96,8 +96,8 @@ def test_render_report_fallback(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level("DEBUG"):
         html_content, txt_content = gen.render_report(report, report_settings)
 
-    assert html_content == "<h2>BulkMailer Report</h2><p>Tasks total: 1, Success: 1, Failed: 0</p>"
-    assert txt_content == "BulkMailer Report\nTasks total: 1, Success: 1, Failed: 0"
+    assert html_content == "<h2>MailCadence Report</h2><p>Tasks total: 1, Success: 1, Failed: 0</p>"
+    assert txt_content == "MailCadence Report\nTasks total: 1, Success: 1, Failed: 0"
     assert "Falling back to default report content for report_email.html.j2" in caplog.text
 
 
@@ -129,5 +129,7 @@ async def test_send_report_headers() -> None:
 
     await gen.send_report(report, report_settings, mock_mailer)
     assert sent_msg is not None
-    assert sent_msg["Date"] is not None and len(sent_msg["Date"]) > 0
-    assert sent_msg["Message-ID"] is not None and len(sent_msg["Message-ID"]) > 0
+    assert sent_msg["Date"] is not None
+    assert len(sent_msg["Date"]) > 0
+    assert sent_msg["Message-ID"] is not None
+    assert len(sent_msg["Message-ID"]) > 0

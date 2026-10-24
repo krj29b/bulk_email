@@ -4,10 +4,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bulk_mailer.cli import run_dispatch_pipeline
-from bulk_mailer.database import get_connection
-from bulk_mailer.models import TaskExecutionStatus
-from bulk_mailer.repository import DatabaseRepository
+from mail_cadence.cli import run_dispatch_pipeline
+from mail_cadence.database import get_connection
+from mail_cadence.models import TaskExecutionStatus
+from mail_cadence.repository import DatabaseRepository
 
 
 @pytest.mark.asyncio

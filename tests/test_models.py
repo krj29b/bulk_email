@@ -3,7 +3,7 @@ from datetime import time
 import pytest
 from pydantic import ValidationError
 
-from bulk_mailer.models import (
+from mail_cadence.models import (
     BodyTemplate,
     ContextVar,
     HourWindow,

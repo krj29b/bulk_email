@@ -6,13 +6,13 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from bulk_mailer.cli import app, run_dispatch_pipeline, setup_logging
+from mail_cadence.cli import app, run_dispatch_pipeline, setup_logging
 
 runner = CliRunner()
 
 
 @pytest.mark.parametrize(
-    "verbose, expected_level",
+    ("verbose", "expected_level"),
     [
         (True, logging.DEBUG),
         (False, logging.INFO),
@@ -40,7 +40,7 @@ def test_cli_dry_run_samples() -> None:
         ["--tasks-xml", str(tasks), "--schedule-xml", str(schedules), "--dry-run"],
     )
     assert result.exit_code == 0
-    assert "Starting bulk email dispatch engine" in result.output or result.exit_code == 0
+    assert "Starting MailCadence email dispatch engine" in result.output or result.exit_code == 0
 
 
 @pytest.mark.asyncio
@@ -78,8 +78,8 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
   </Schedule>
 </WorkSchedules>""")
 
-    from bulk_mailer.cli import run_dispatch_pipeline
-    from bulk_mailer.models import TaskExecutionResult, TaskExecutionStatus
+    from mail_cadence.cli import run_dispatch_pipeline
+    from mail_cadence.models import TaskExecutionResult, TaskExecutionStatus
 
     captured_rl: list[pytest.MonkeyPatch | object] = []
 
@@ -103,7 +103,7 @@ async def test_shared_primitives_per_schedule_window(tmp_path: Path) -> None:
         return sem
 
     with (
-        patch("bulk_mailer.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch),
+        patch("mail_cadence.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch),
         patch("asyncio.Semaphore", side_effect=tracked_sem),
     ):
         code = await run_dispatch_pipeline(
@@ -221,7 +221,7 @@ async def test_task_priority_scheduling_order(tmp_path: Path) -> None:
   </Schedule>
 </WorkSchedules>""")
 
-    from bulk_mailer.models import MailTask, TaskExecutionResult, TaskExecutionStatus
+    from mail_cadence.models import MailTask, TaskExecutionResult, TaskExecutionStatus
 
     executed_order: list[str] = []
 
@@ -235,7 +235,7 @@ async def test_task_priority_scheduling_order(tmp_path: Path) -> None:
         )
 
     db_path = str(tmp_path / "test.db")
-    with patch("bulk_mailer.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch):
+    with patch("mail_cadence.cli.AsyncMailer.dispatch_task", side_effect=fake_dispatch):
         code = await run_dispatch_pipeline(
             tasks_xml, schedules_xml, dry_run=True, db_path=db_path
         )

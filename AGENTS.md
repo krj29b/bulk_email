@@ -1,6 +1,6 @@
 # Architectural and Quality Guidelines (AGENTS.md)
 
-This document defines absolute engineering rules for the `bulk-mailer` project. Any code changes must comply with the following principles before task completion.
+This document defines absolute engineering rules for the `mail-cadence` project. Any code changes must comply with the following principles before task completion.
 
 ## 1. Mandatory Quality Gates
 Before declaring code readiness, run all of the following tools. None of them may return errors or warnings:

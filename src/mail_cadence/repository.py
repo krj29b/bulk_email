@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from bulk_mailer.models import (
+from mail_cadence.models import (
     BodyTemplate,
     ContextVar,
     HourWindow,
@@ -138,7 +138,7 @@ class DatabaseRepository:
             return ReportSettings(
                 recipient="admin@example.com",
                 sender=None,
-                subject_prefix="[BulkMailer Report]",
+                subject_prefix="[MailCadence Report]",
                 include_full_error_trace=True,
             )
 

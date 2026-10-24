@@ -4,7 +4,7 @@ import time as time_module
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from bulk_mailer.models import (
+from mail_cadence.models import (
     HourWindow,
     MailTask,
     Schedule,
@@ -12,7 +12,7 @@ from bulk_mailer.models import (
     WorkSchedules,
     parse_time_str,
 )
-from bulk_mailer.repository import DatabaseRepository
+from mail_cadence.repository import DatabaseRepository
 
 __all__ = [
     "TaskScheduler",
@@ -126,17 +126,16 @@ class TaskScheduler:
             if start_t <= end_t:
                 window_start_dt = datetime.combine(ref_date, start_t, tzinfo=self.timezone)
                 window_end_dt = datetime.combine(ref_date, end_t, tzinfo=self.timezone)
+            elif reference_dt.time() >= start_t:
+                window_start_dt = datetime.combine(ref_date, start_t, tzinfo=self.timezone)
+                window_end_dt = datetime.combine(
+                    ref_date + timedelta(days=1), end_t, tzinfo=self.timezone
+                )
             else:
-                if reference_dt.time() >= start_t:
-                    window_start_dt = datetime.combine(ref_date, start_t, tzinfo=self.timezone)
-                    window_end_dt = datetime.combine(
-                        ref_date + timedelta(days=1), end_t, tzinfo=self.timezone
-                    )
-                else:
-                    window_start_dt = datetime.combine(
-                        ref_date - timedelta(days=1), start_t, tzinfo=self.timezone
-                    )
-                    window_end_dt = datetime.combine(ref_date, end_t, tzinfo=self.timezone)
+                window_start_dt = datetime.combine(
+                    ref_date - timedelta(days=1), start_t, tzinfo=self.timezone
+                )
+                window_end_dt = datetime.combine(ref_date, end_t, tzinfo=self.timezone)
 
             if window_start_dt <= last_run_tz <= window_end_dt:
                 return False, None

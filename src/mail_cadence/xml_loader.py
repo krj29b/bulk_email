@@ -4,8 +4,8 @@ from typing import Literal, cast
 
 import defusedxml.ElementTree as ET  # type: ignore[import-untyped]
 
-from bulk_mailer.models import MailConfiguration, WorkSchedules
-from bulk_mailer.repository import DatabaseRepository
+from mail_cadence.models import MailConfiguration, WorkSchedules
+from mail_cadence.repository import DatabaseRepository
 
 
 class XMLValidationError(Exception):
