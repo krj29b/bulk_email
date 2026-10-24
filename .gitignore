@@ -108,3 +108,7 @@ local_*.xml
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+
+config/testmail/*
+uv.lock

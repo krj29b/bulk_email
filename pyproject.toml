@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mail-cadence"
-version = "0.2.0"
+version = "0.3.0"
 description = "Asynchronous SQLite-backed bulk email dispatch and reporting engine with XML import/export support"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -109,11 +109,11 @@ select = [
     "ASYNC", # flake8-async
     "C90",   # McCabe cyclomatic complexity
     "PLR",   # Pylint Refactor
-    "PERF",  # Perflint 
+    "PERF",  # Perflint
     "PIE",   # flake8-pie
     "PT",    # flake8-pytest-style
     "RUF",   # Ruff-specific rules
-    "S",     # flake8-bandit 
+    "S",     # flake8-bandit
 ]
 
 [tool.ruff.lint.mccabe]
