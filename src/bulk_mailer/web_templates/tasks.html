@@ -1,0 +1,141 @@
+{% extends "layout.html" %}
+{% block title %}Tasks - BulkMailer Admin{% endblock %}
+{% block content %}
+<h2>Mail Tasks</h2>
+
+{% if message %}
+<div class="alert-success">{{ message }}</div>
+{% endif %}
+{% if error %}
+<div class="alert-error">{{ error }}</div>
+{% endif %}
+
+<div id="messages"></div>
+
+<details>
+  <summary role="button" class="contrast">Create / Update Task</summary>
+  <form action="/tasks" method="POST" style="margin-top: 1rem;">
+    <div class="grid">
+      <label for="id">
+        Task ID *
+        <input type="text" id="id" name="id" required placeholder="e.g. daily_newsletter">
+      </label>
+      <label for="schedule_ref">
+        Schedule Ref *
+        <select id="schedule_ref" name="schedule_ref" required>
+          {% for sched in schedules %}
+            <option value="{{ sched.id }}">{{ sched.id }} - {{ sched.description or '' }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label for="sender">
+        Sender Email *
+        <input type="text" id="sender" name="sender" required placeholder="sender@example.com">
+      </label>
+      <label for="priority">
+        Priority
+        <select id="priority" name="priority">
+          <option value="high">High</option>
+          <option value="normal" selected>Normal</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <label for="max_retries">
+        Max Retries
+        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+      </label>
+    </div>
+
+    <label for="subject">
+      Subject *
+      <input type="text" id="subject" name="subject" required placeholder="Email Subject">
+    </label>
+
+    <div class="grid">
+      <label for="body_format">
+        Format
+        <select id="body_format" name="body_format">
+          <option value="html" selected>HTML</option>
+          <option value="text">Text</option>
+        </select>
+      </label>
+      <label for="body_template_path">
+        Template Path *
+        <input type="text" id="body_template_path" name="body_template_path" required placeholder="templates/newsletter.html.j2">
+      </label>
+    </div>
+
+    <div class="grid">
+      <label for="to">
+        To Recipients (comma/newline separated) *
+        <textarea id="to" name="to" required placeholder="user1@example.com, user2@example.com"></textarea>
+      </label>
+      <label for="cc">
+        Cc Recipients
+        <textarea id="cc" name="cc" placeholder="cc@example.com"></textarea>
+      </label>
+      <label for="bcc">
+        Bcc Recipients
+        <textarea id="bcc" name="bcc" placeholder="bcc@example.com"></textarea>
+      </label>
+    </div>
+
+    <label for="context_variables">
+      Context Variables (JSON e.g. [{"name": "user_name", "value": "John"}])
+      <textarea id="context_variables" name="context_variables" placeholder='[{"name": "company", "value": "Acme Corp"}]'></textarea>
+    </label>
+
+    <button type="submit">Save Task</button>
+  </form>
+</details>
+
+<hr>
+
+<h3>Existing Tasks</h3>
+{% if tasks %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Schedule</th>
+      <th>Sender</th>
+      <th>Subject</th>
+      <th>Template</th>
+      <th>Recipients (To/Cc/Bcc)</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for task in tasks %}
+    <tr id="task-row-{{ task.id }}">
+      <td><strong>{{ task.id }}</strong></td>
+      <td>{{ task.schedule_ref }}</td>
+      <td>{{ task.sender }}</td>
+      <td>{{ task.subject }}</td>
+      <td><small>{{ task.body_template.template_path }} ({{ task.body_template.format }})</small></td>
+      <td>
+        <small>
+          To: {{ task.recipients.to | join(', ') }}<br>
+          {% if task.recipients.cc %}Cc: {{ task.recipients.cc | join(', ') }}<br>{% endif %}
+          {% if task.recipients.bcc %}Bcc: {{ task.recipients.bcc | join(', ') }}{% endif %}
+        </small>
+      </td>
+      <td>
+        <a href="/tasks/{{ task.id }}/preview" target="_blank" role="button" class="outline secondary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Preview</a>
+        <button hx-delete="/tasks/{{ task.id }}"
+                hx-target="#task-row-{{ task.id }}"
+                hx-swap="outerHTML"
+                class="outline contrast"
+                style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Delete</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No mail tasks found.</p>
+{% endif %}
+{% endblock %}

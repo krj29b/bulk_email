@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}BulkMailer Admin{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+  <style>
+    body { padding: 20px; }
+    nav { margin-bottom: 2rem; }
+    .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { padding: 1rem; border-radius: 8px; border: 1px solid var(--pico-muted-border-color); text-align: center; }
+    .stat-card h3 { margin: 0; font-size: 2rem; }
+    .stat-card p { margin: 0; font-size: 0.9rem; color: var(--pico-muted-color); }
+    .alert-error { background-color: #f8d7da; color: #721c24; padding: 0.75rem 1.25rem; border-radius: 4px; margin-bottom: 1rem; }
+    .alert-success { background-color: #d4edda; color: #155724; padding: 0.75rem 1.25rem; border-radius: 4px; margin-bottom: 1rem; }
+    .badge-success { background-color: #28a745; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    .badge-failed { background-color: #dc3545; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    .badge-partial { background-color: #ffc107; color: black; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    .badge-skipped { background-color: #6c757d; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <ul>
+        <li><strong>BulkMailer Admin</strong></li>
+      </ul>
+      <ul>
+        <li><a href="/" {% if active_page == 'dashboard' %}class="secondary"{% endif %}>Dashboard</a></li>
+        <li><a href="/tasks" {% if active_page == 'tasks' %}class="secondary"{% endif %}>Tasks</a></li>
+        <li><a href="/schedules" {% if active_page == 'schedules' %}class="secondary"{% endif %}>Schedules</a></li>
+        <li><a href="/settings" {% if active_page == 'settings' %}class="secondary"{% endif %}>Settings</a></li>
+      </ul>
+    </nav>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

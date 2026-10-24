@@ -1,0 +1,90 @@
+{% extends "layout.html" %}
+{% block title %}Schedules - BulkMailer Admin{% endblock %}
+{% block content %}
+<h2>Work Schedules</h2>
+
+{% if message %}
+<div class="alert-success">{{ message }}</div>
+{% endif %}
+{% if error %}
+<div class="alert-error" id="schedule-error">{{ error }}</div>
+{% endif %}
+
+<div id="messages"></div>
+
+<details>
+  <summary role="button" class="contrast">Create / Update Schedule</summary>
+  <form action="/schedules" method="POST" style="margin-top: 1rem;">
+    <div class="grid">
+      <label for="id">
+        Schedule ID *
+        <input type="text" id="id" name="id" required placeholder="e.g. business_hours">
+      </label>
+      <label for="description">
+        Description
+        <input type="text" id="description" name="description" placeholder="Standard business hour dispatch window">
+      </label>
+    </div>
+
+    <label for="allowed_hours_json">
+      Allowed Hours (JSON list of HourWindows e.g. [{"start": "08:00", "end": "18:00", "max_concurrency": 2, "rate_limit_per_min": 60}])
+      <textarea id="allowed_hours_json" name="allowed_hours_json" required>[{"start": "08:00", "end": "18:00", "max_concurrency": 2, "rate_limit_per_min": 60}]</textarea>
+    </label>
+
+    <button type="submit">Save Schedule</button>
+  </form>
+</details>
+
+<hr>
+
+<h3>Timezone Configuration</h3>
+<form action="/schedules/timezone" method="POST" class="grid" style="max-width: 400px;">
+  <label for="timezone">
+    System Timezone
+    <input type="text" id="timezone" name="timezone" value="{{ work_schedules.timezone }}" required>
+  </label>
+  <div style="align-self: end;">
+    <button type="submit" class="secondary">Update Timezone</button>
+  </div>
+</form>
+
+<hr>
+
+<h3>Existing Schedules</h3>
+{% if work_schedules.schedules %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Description</th>
+      <th>Allowed Hours</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sched in work_schedules.schedules %}
+    <tr id="schedule-row-{{ sched.id }}">
+      <td><strong>{{ sched.id }}</strong></td>
+      <td>{{ sched.description or '-' }}</td>
+      <td>
+        <small>
+          {% for hw in sched.allowed_hours %}
+            Window: {{ hw.start }} - {{ hw.end }} (Concurrency: {{ hw.max_concurrency }}, Rate: {{ hw.rate_limit_per_min }}/min)<br>
+          {% endfor %}
+        </small>
+      </td>
+      <td>
+        <button hx-delete="/schedules/{{ sched.id }}"
+                hx-target="#schedule-row-{{ sched.id }}"
+                hx-swap="outerHTML"
+                class="outline contrast"
+                style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Delete</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No schedules configured.</p>
+{% endif %}
+{% endblock %}

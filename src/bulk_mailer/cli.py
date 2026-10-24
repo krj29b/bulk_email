@@ -343,5 +343,55 @@ def cli_export_xml(
             raise typer.Exit(code=1) from exc
 
 
+
+
+@app.command("serve")
+def cli_serve(
+    host: Annotated[
+        str,
+        typer.Option(
+            "--host",
+            "-h",
+            help="Host address to bind web server",
+        ),
+    ] = "127.0.0.1",
+    port: Annotated[
+        int,
+        typer.Option(
+            "--port",
+            "-p",
+            help="Port to bind web server",
+        ),
+    ] = 8000,
+    db: Annotated[
+        str,
+        typer.Option(
+            "--db",
+            "-b",
+            envvar="BULK_MAILER_DB",
+            help="Path to SQLite database file",
+        ),
+    ] = "bulk_mailer.db",
+    template_dir: Annotated[
+        str,
+        typer.Option(
+            "--template-dir",
+            "-t",
+            help="Path to template directory for live task preview",
+        ),
+    ] = ".",
+) -> None:
+    """Launch the web administration and observability panel."""
+    import uvicorn
+
+    from bulk_mailer.web import create_app
+
+    with closing(get_connection(db)) as conn:
+        init_db(conn)
+
+    web_app = create_app(db_path=db, template_dir=template_dir)
+    uvicorn.run(web_app, host=host, port=port)
+
+
 if __name__ == "__main__":
     app()

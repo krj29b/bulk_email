@@ -1,8 +1,9 @@
+import contextlib
 import json
 import sqlite3
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from bulk_mailer.models import (
     BodyTemplate,
@@ -451,3 +452,188 @@ class DatabaseRepository:
             )
 
         return results
+
+    # --- Granular Task & Schedule Operations & Analytics ---
+
+    def get_mail_task(self, task_id: str) -> MailTask | None:
+        r = self.conn.execute(
+            """
+            SELECT id, max_retries, priority, schedule_ref, sender, subject,
+                   body_format, body_template_path
+            FROM tasks
+            WHERE id = ?
+            """,
+            (task_id,),
+        ).fetchone()
+
+        if not r:
+            return None
+
+        rec_rows = self.conn.execute(
+            """
+            SELECT recipient_type, email
+            FROM task_recipients
+            WHERE task_id = ?
+            ORDER BY seq, id
+            """,
+            (task_id,),
+        ).fetchall()
+
+        rec_data: dict[str, list[str]] = {"to": [], "cc": [], "bcc": []}
+        for rec in rec_rows:
+            rtype = rec["recipient_type"]
+            if rtype in rec_data:
+                rec_data[rtype].append(rec["email"])
+
+        var_rows = self.conn.execute(
+            """
+            SELECT var_name, var_value
+            FROM task_context_variables
+            WHERE task_id = ?
+            ORDER BY seq, id
+            """,
+            (task_id,),
+        ).fetchall()
+
+        context_vars = [
+            ContextVar(name=v["var_name"], value=v["var_value"]) for v in var_rows
+        ]
+
+        return MailTask(
+            id=r["id"],
+            max_retries=r["max_retries"],
+            priority=r["priority"],
+            schedule_ref=r["schedule_ref"],
+            sender=r["sender"],
+            recipients=Recipients(
+                to=rec_data["to"],
+                cc=rec_data["cc"],
+                bcc=rec_data["bcc"],
+            ),
+            subject=r["subject"],
+            body_template=BodyTemplate(
+                format=r["body_format"], template_path=r["body_template_path"]
+            ),
+            context_variables=context_vars,
+        )
+
+    def save_single_task(self, task: MailTask) -> None:
+        with self.conn:
+            self._save_task(task, mode="upsert")
+
+    def delete_mail_task(self, task_id: str) -> bool:
+        with self.conn:
+            cursor = self.conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            return cursor.rowcount > 0
+
+    def save_single_schedule(self, schedule: Schedule) -> None:
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO schedules (id, description)
+                VALUES (?, ?)
+                ON CONFLICT(id) DO UPDATE SET description = excluded.description
+                """,
+                (schedule.id, schedule.description),
+            )
+            self.conn.execute("DELETE FROM hour_windows WHERE schedule_id = ?", (schedule.id,))
+
+            hw_data = [
+                (
+                    schedule.id,
+                    hw.start,
+                    hw.end,
+                    hw.max_concurrency,
+                    hw.rate_limit_per_min,
+                    seq,
+                )
+                for seq, hw in enumerate(schedule.allowed_hours)
+            ]
+            if hw_data:
+                self.conn.executemany(
+                    """
+                    INSERT INTO hour_windows
+                    (schedule_id, start_time, end_time, max_concurrency,
+                     rate_limit_per_min, seq)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    hw_data,
+                )
+
+    def delete_schedule(self, schedule_id: str) -> bool:
+        with self.conn:
+            cursor = self.conn.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+            return cursor.rowcount > 0
+
+    def get_recent_execution_logs(
+        self,
+        limit: int = 50,
+        status_filter: str | None = None,
+        task_id_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query = [
+            "SELECT id, batch_id, task_id, status, sent_count, failed_recipients,",
+            "       duration_ms, error_details, attempt_count, executed_at",
+            "FROM execution_logs",
+        ]
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if status_filter:
+            conditions.append("status = ?")
+            params.append(status_filter)
+        if task_id_filter:
+            conditions.append("task_id = ?")
+            params.append(task_id_filter)
+
+        if conditions:
+            query.append("WHERE " + " AND ".join(conditions))
+
+        query.append("ORDER BY id DESC LIMIT ?")
+        params.append(limit)
+
+        rows = self.conn.execute(" ".join(query), params).fetchall()
+        logs: list[dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            if d.get("failed_recipients"):
+                with contextlib.suppress(json.JSONDecodeError, TypeError):
+                    d["failed_recipients"] = json.loads(d["failed_recipients"])
+            logs.append(d)
+        return logs
+
+    def get_dashboard_stats(self) -> dict[str, Any]:
+        total_tasks = self.conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        total_schedules = self.conn.execute("SELECT COUNT(*) FROM schedules").fetchone()[0]
+        total_executions = self.conn.execute("SELECT COUNT(*) FROM execution_logs").fetchone()[0]
+
+        status_rows = self.conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM execution_logs GROUP BY status"
+        ).fetchall()
+        status_counts: dict[str, int] = {
+            "SUCCESS": 0,
+            "PARTIAL": 0,
+            "FAILED": 0,
+            "SKIPPED_SCHEDULE": 0,
+        }
+        for sr in status_rows:
+            status_counts[sr["status"]] = sr["cnt"]
+
+        tot_sent_row = self.conn.execute("SELECT SUM(sent_count) FROM execution_logs").fetchone()
+        total_emails_sent = tot_sent_row[0] if tot_sent_row and tot_sent_row[0] is not None else 0
+
+        avg_dur_row = self.conn.execute("SELECT AVG(duration_ms) FROM execution_logs").fetchone()
+        avg_duration_ms = avg_dur_row[0] if avg_dur_row and avg_dur_row[0] is not None else 0.0
+
+        return {
+            "total_tasks": total_tasks,
+            "total_schedules": total_schedules,
+            "total_executions": total_executions,
+            "success_count": status_counts.get("SUCCESS", 0),
+            "partial_count": status_counts.get("PARTIAL", 0),
+            "failed_count": status_counts.get("FAILED", 0),
+            "skipped_count": status_counts.get("SKIPPED_SCHEDULE", 0),
+            "status_counts": status_counts,
+            "total_emails_sent": total_emails_sent,
+            "avg_duration_ms": round(float(avg_duration_ms), 2),
+        }
